@@ -123,6 +123,7 @@ function setMode(mode) {
     mirror.start();
   }
   updateScoreBadge();
+  updateKbdButton();
   publishStatus({ mode, scores: getAllScores() });
 }
 
@@ -168,6 +169,7 @@ function setPaused(next) {
     startBgMusic();
   }
   updateMusicButton(isBgMusicPlaying());
+  updateKbdButton();
   publishStatus({ paused });
 }
 
@@ -215,29 +217,69 @@ window.addEventListener('pointerup', () => document.body.classList.remove('press
 window.addEventListener('pointercancel', () => document.body.classList.remove('pressed'));
 
 // ---- keyboard routing -----------------------------------------------------------
-window.addEventListener('keydown', (e) => {
-  // let the grown-ups panel and any focused text box use the keyboard normally
-  if (parentPanel.isOpen() || parentPanel.isGateOpen()) return;
-  const active = document.activeElement;
-  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
-
-  e.preventDefault();
-
+function routeKey(char) {
   if (!started || paused) return;
-  const char = e.key.length === 1 ? e.key.toUpperCase() : '';
   if (!/^[A-Z0-9]$/.test(char)) return;
-
   if (currentMode === 'letters') {
     letterGame.handleKey(char);
   } else {
     // keys rain down festively over every mode (mash still gets the sad noise)
     letterGame.handleAmbientKey(char);
   }
+}
+
+window.addEventListener('keydown', (e) => {
+  // let the grown-ups panel and any focused text box use the keyboard normally
+  if (parentPanel.isOpen() || parentPanel.isGateOpen()) return;
+  const active = document.activeElement;
+  if (active === kbdInput) {
+    // the on-screen-keyboard input routes through its own handler below
+    return;
+  }
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  e.preventDefault();
+  if (e.key.length === 1) routeKey(e.key.toUpperCase());
+});
+
+// ---- mobile on-screen keyboard ----------------------------------------------------
+// Touch devices have no physical keys, so a ⌨️ button focuses an invisible
+// input; whatever the OS keyboard types is routed into the game.
+const kbdButton = document.getElementById('kbd-button');
+const kbdInput = document.getElementById('kbd-input');
+const isTouchDevice = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+
+function updateKbdButton() {
+  const show = isTouchDevice && started && currentMode === 'letters' && !paused;
+  kbdButton.classList.toggle('hidden', !show);
+  if (!show && document.activeElement === kbdInput) kbdInput.blur();
+}
+
+bindTap(kbdButton, () => {
+  kbdInput.value = '';
+  kbdInput.focus({ preventScroll: true });
+});
+
+kbdInput.addEventListener('input', () => {
+  const typed = kbdInput.value;
+  kbdInput.value = '';
+  for (const ch of typed) routeKey(ch.toUpperCase());
+});
+kbdInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') kbdInput.blur();
 });
 
 // small debug handle for smoke tests / parent tinkering
 window.__hb = { letterGame, pictureGame, setMode: (m) => setMode(m), setPaused: (p) => setPaused(p) };
+
+// ---- reveal: everything is wired up, swap the boot loader for the app ----
+document.body.classList.remove('booting');
+const bootLoader = document.getElementById('app-loading');
+if (bootLoader) {
+  bootLoader.classList.add('done');
+  setTimeout(() => bootLoader.remove(), 600);
+}
 
 // ---- boot ------------------------------------------------------------------------
 const startOverlay = document.getElementById('start-overlay');
@@ -252,6 +294,7 @@ document.getElementById('start-button').addEventListener('click', () => {
   started = true;
   letterGame.start();
   updateScoreBadge();
+  updateKbdButton();
   initNet({
     onStatus: (text) => {
       const el = document.getElementById('net-status');

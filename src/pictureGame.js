@@ -1,6 +1,6 @@
 import { BUILTIN_CARDS } from './words.js';
 import { listCustomCards } from './customCards.js';
-import { playSuccess, playChime } from './audio.js';
+import { playSuccess, playChime, playBoing } from './audio.js';
 import { speak, createListener, isSpeechActive, onSpeechActivity } from './speech.js';
 import { addScore } from './scoreboard.js';
 
@@ -64,7 +64,14 @@ export class PictureGame {
     });
 
     this.pictureEl.addEventListener('pointerdown', () => {
-      if (this.running && !this.paused && this.card) this._sayCard();
+      if (!this.running || this.paused || !this.card) return;
+      playBoing(1.2);
+      this._sayCard();
+      // hop the picture on every poke (class stays on until the next card,
+      // so the pop-in animation doesn't replay when the hop ends)
+      this.pictureEl.classList.remove('hop');
+      void this.pictureEl.offsetWidth;
+      this.pictureEl.classList.add('hop');
     });
   }
 
@@ -180,6 +187,7 @@ export class PictureGame {
       this.pictureEl.textContent = card.emoji;
     }
     // retrigger the pop-in animation
+    this.pictureEl.classList.remove('hop');
     this.pictureEl.style.animation = 'none';
     void this.pictureEl.offsetWidth;
     this.pictureEl.style.animation = '';

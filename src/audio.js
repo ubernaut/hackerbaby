@@ -123,6 +123,38 @@ export function playShutter() {
   tone({ freq: 1500, time: 0.02, dur: 0.05, type: 'square', vol: 0.08 });
 }
 
+export function playBoing(mult = 1) {
+  if (!ctx) return;
+  const t0 = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(420 * mult, t0);
+  osc.frequency.exponentialRampToValueAtTime(110 * mult, t0 + 0.16);
+  osc.frequency.exponentialRampToValueAtTime(280 * mult, t0 + 0.34);
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(0.3, t0 + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4);
+  osc.connect(gain);
+  gain.connect(master);
+  osc.start(t0);
+  osc.stop(t0 + 0.45);
+}
+
+export function playSlideWhistle(up = true) {
+  if (!ctx) return;
+  const from = up ? 320 : 950;
+  const to = up ? 950 : 320;
+  tone({ freq: from, dur: 0.35, type: 'sine', vol: 0.2, glideTo: to });
+  tone({ freq: from * 2, dur: 0.35, type: 'sine', vol: 0.06, glideTo: to * 2 });
+}
+
+export function playHonk() {
+  if (!ctx) return;
+  tone({ freq: 196, dur: 0.18, type: 'square', vol: 0.16 });
+  tone({ freq: 294, dur: 0.18, type: 'square', vol: 0.1 });
+}
+
 export function playChime() {
   if (!ctx) return;
   [523.25, 659.25, 783.99].forEach((f, i) => {

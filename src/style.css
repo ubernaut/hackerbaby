@@ -97,6 +97,10 @@ body {
   top: max(10px, env(safe-area-inset-top));
   right: max(10px, env(safe-area-inset-right));
   display: flex;
+  /* wraps only when the row genuinely runs out of screen */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: calc(100vw - max(10px, env(safe-area-inset-right)) - 12px);
   gap: 10px;
   z-index: 40;
   opacity: 0.85;
@@ -120,12 +124,9 @@ body {
   background: rgba(124, 77, 255, 0.6);
 }
 
-/* small / touch screens: wrap into rows and keep targets finger-sized */
+/* small / touch screens: keep targets finger-sized but a bit tighter */
 @media (max-width: 720px) {
   #mode-bar {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    max-width: 60vw;
     gap: 8px;
   }
 
@@ -188,6 +189,28 @@ body {
   to {
     transform: scale(1) rotate(0);
     opacity: 1;
+  }
+}
+
+#card-picture.hop {
+  animation: card-hop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+@keyframes card-hop {
+  0% {
+    transform: translateY(0) scale(1, 1);
+  }
+  25% {
+    transform: translateY(-7vh) scale(0.95, 1.1) rotate(4deg);
+  }
+  55% {
+    transform: translateY(0) scale(1.08, 0.9) rotate(-3deg);
+  }
+  75% {
+    transform: translateY(-2vh) scale(1, 1.03);
+  }
+  100% {
+    transform: translateY(0) scale(1, 1);
   }
 }
 
@@ -654,6 +677,46 @@ body {
   box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.25);
 }
 
+/* ---- mobile on-screen keyboard summoner ---- */
+#kbd-button {
+  position: fixed;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 45;
+  width: 76px;
+  height: 76px;
+  font-size: 2.4rem;
+  border-radius: 24px;
+  border: 3px solid rgba(255, 238, 88, 0.55);
+  background: rgba(20, 8, 46, 0.75);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s;
+}
+
+#kbd-button:active {
+  transform: scale(0.85);
+}
+
+/* invisible but focusable: focusing it summons the mobile keyboard.
+   font-size 16px+ stops iOS from zooming in on focus. */
+#kbd-input {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  height: 2px;
+  font-size: 16px;
+  opacity: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  pointer-events: none;
+}
+
 /* ---- effects layer: shower/confetti above other modes ---- */
 #scene.fx-layer {
   z-index: 20;
@@ -663,7 +726,7 @@ body {
 /* ---- score badge ---- */
 #score-badge {
   position: fixed;
-  top: max(10px, env(safe-area-inset-top));
+  bottom: max(14px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 45;

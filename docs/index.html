@@ -9,10 +9,90 @@
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>Hacker Baby</title>
-    <script type="module" crossorigin src="./assets/index-B7iVj8Ws.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Cmy8-8V5.css">
+    <style>
+      /* Critical boot styles, inlined so the first paint is never unstyled:
+         everything stays hidden behind a loader until the app is ready. */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #1a0b2e;
+        overflow: hidden;
+      }
+      body.booting > *:not(#app-loading) {
+        display: none !important;
+      }
+      #app-loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        background: radial-gradient(circle at 50% 40%, #4527a0, #1a0b2e 75%);
+        z-index: 999;
+        transition: opacity 0.45s;
+      }
+      #app-loading.done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #app-loading .star {
+        font-size: 64px;
+        animation: hb-spin 1.2s ease-in-out infinite;
+      }
+      #app-loading .dots {
+        display: flex;
+        gap: 10px;
+      }
+      #app-loading .dots span {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        animation: hb-bounce 1s ease-in-out infinite;
+      }
+      #app-loading .dots span:nth-child(1) {
+        background: #ff5252;
+      }
+      #app-loading .dots span:nth-child(2) {
+        background: #ffee58;
+        animation-delay: 0.15s;
+      }
+      #app-loading .dots span:nth-child(3) {
+        background: #69f0ae;
+        animation-delay: 0.3s;
+      }
+      @keyframes hb-spin {
+        0% {
+          transform: rotate(0) scale(1);
+        }
+        50% {
+          transform: rotate(180deg) scale(1.25);
+        }
+        100% {
+          transform: rotate(360deg) scale(1);
+        }
+      }
+      @keyframes hb-bounce {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-12px);
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-DqaNpFDG.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-XA2R-KSj.css">
   </head>
-  <body>
+  <body class="booting">
+    <div id="app-loading">
+      <div class="star">⭐</div>
+      <div class="dots"><span></span><span></span><span></span></div>
+    </div>
+
     <canvas id="scene"></canvas>
 
     <div id="picture-mode" class="overlay hidden">
@@ -61,6 +141,18 @@
     </div>
 
     <div id="score-badge" class="hidden">⭐ 0</div>
+
+    <button id="kbd-button" class="hidden" aria-label="Show keyboard">⌨️</button>
+    <input
+      id="kbd-input"
+      type="text"
+      autocomplete="off"
+      autocapitalize="characters"
+      autocorrect="off"
+      spellcheck="false"
+      aria-hidden="true"
+      tabindex="-1"
+    />
 
     <div id="pause-overlay" class="overlay hidden">
       <button id="resume-button">▶</button>

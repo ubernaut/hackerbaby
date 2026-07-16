@@ -3,7 +3,7 @@ import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import fontJson from 'three/examples/fonts/helvetiker_bold.typeface.json';
 import { LETTERS, randomWordFor } from './words.js';
-import { playPop, playSuccess, playSad, playWhoosh } from './audio.js';
+import { playPop, playSuccess, playSad, playWhoosh, playBoing, playSlideWhistle, playHonk } from './audio.js';
 import { speak } from './speech.js';
 import { getScore, addScore } from './scoreboard.js';
 import { getDifficulty } from './settings.js';
@@ -134,6 +134,7 @@ export class LetterGame {
     this._initConfetti();
     this._initSparkles();
     this._initPointerTracking();
+    this._initTapReactions();
 
     this.letterGroup = new THREE.Group();
     this.scene.add(this.letterGroup);
@@ -318,6 +319,92 @@ export class LetterGame {
       this.pointerActive = false;
       this.lastSparkleWorld = null;
     });
+  }
+
+  // --- tap reactions: poking things makes them spin, hop, flip, wobble ------
+
+  _initTapReactions() {
+    this.raycaster = new THREE.Raycaster();
+    this.reaction = null;
+    this.canvas.addEventListener('pointerdown', (e) => {
+      // don't steal focus: tapping the scene must not dismiss the on-screen
+      // keyboard a little hand just summoned
+      e.preventDefault();
+      if (this.paused || this.overlayMode) return;
+      const ndc = new THREE.Vector2(
+        (e.clientX / window.innerWidth) * 2 - 1,
+        -(e.clientY / window.innerHeight) * 2 + 1
+      );
+      this.raycaster.setFromCamera(ndc, this.camera);
+
+      // the big letter first
+      if (this.letterMesh && !this.celebrating) {
+        if (this.raycaster.intersectObject(this.letterMesh, false).length) {
+          this._reactLetter();
+          return;
+        }
+      }
+
+      // then the falling shower letters
+      const live = this.shower.filter((s) => s.alive).map((s) => s.mesh);
+      const hit = this.raycaster.intersectObjects(live, false)[0];
+      if (hit) {
+        this._kickShowerLetter(hit.object);
+        return;
+      }
+
+      // empty space: a little sparkle puff
+      const world = this._pointerWorldAt(SPARKLE_Z);
+      if (world) {
+        for (let i = 0; i < 10; i++) this._spawnSparkle(world);
+        playPop();
+      }
+    });
+  }
+
+  _reactLetter() {
+    const types = ['spin', 'flip', 'hop', 'wobble'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    this.reaction = { type, start: this.clock.elapsedTime, dur: type === 'wobble' ? 0.9 : 0.75 };
+    if (type === 'spin') playSlideWhistle(true);
+    else if (type === 'flip') playSlideWhistle(false);
+    else if (type === 'hop') playBoing();
+    else playHonk();
+  }
+
+  _kickShowerLetter(mesh) {
+    const item = this.shower.find((s) => s.mesh === mesh);
+    if (!item) return;
+    item.vel.y = 7 + Math.random() * 4;
+    item.vel.x = (Math.random() - 0.5) * 6;
+    item.spin.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
+    mesh.material.color.setHSL(Math.random(), 0.9, 0.6);
+    mesh.material.emissive.copy(mesh.material.color).multiplyScalar(0.35);
+    playBoing(1.6 + Math.random() * 0.8);
+  }
+
+  _applyReaction(t) {
+    if (!this.reaction || !this.letterMesh || this.celebrating) return;
+    const p = Math.min(1, (t - this.reaction.start) / this.reaction.dur);
+    const easeInOut = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+    const arc = Math.sin(p * Math.PI);
+    switch (this.reaction.type) {
+      case 'spin':
+        this.letterMesh.rotation.y += easeInOut * Math.PI * 4;
+        break;
+      case 'flip':
+        this.letterMesh.rotation.x += easeInOut * Math.PI * 2;
+        break;
+      case 'hop':
+        this.letterMesh.position.y += arc * 2.1;
+        this.letterMesh.scale.y *= 1 + arc * 0.3;
+        this.letterMesh.scale.x *= 1 - arc * 0.15;
+        break;
+      case 'wobble':
+        this.letterMesh.rotation.z += Math.sin(p * Math.PI * 6) * (1 - p) * 0.55;
+        break;
+    }
+    if (p >= 1) this.reaction = null;
   }
 
   _pointerRay() {
@@ -705,7 +792,9 @@ export class LetterGame {
         this.letterMesh.scale.setScalar(base);
         this.letterMesh.rotation.y = Math.sin(t * 0.9) * 0.4;
         this.letterMesh.rotation.x = Math.sin(t * 0.6) * 0.12;
+        this.letterMesh.rotation.z = 0;
         this.letterMesh.position.y = Math.sin(t * 1.3) * 0.35;
+        this._applyReaction(t);
       }
     }
 
