@@ -1,9 +1,21 @@
 // Text-to-speech prompts and speech recognition for the picture game.
+// Voices are the device/browser's built-in speechSynthesis voices; the
+// grown-ups panel can pin a specific one (persisted via settings).
+
+import { getVoiceURI, getSpeechRate } from './settings.js';
 
 let voice = null;
 
 function pickVoice() {
   const voices = window.speechSynthesis?.getVoices?.() || [];
+  const pinnedUri = getVoiceURI();
+  if (pinnedUri) {
+    const pinned = voices.find((v) => v.voiceURI === pinnedUri);
+    if (pinned) {
+      voice = pinned;
+      return;
+    }
+  }
   const preferred =
     voices.find((v) => /en/i.test(v.lang) && /female|zira|samantha|google us english/i.test(v.name)) ||
     voices.find((v) => /^en/i.test(v.lang)) ||
@@ -14,6 +26,25 @@ function pickVoice() {
 if (window.speechSynthesis) {
   pickVoice();
   window.speechSynthesis.onvoiceschanged = pickVoice;
+}
+
+// English voices first (the words are English), then everything else.
+export function listVoices() {
+  const voices = [...(window.speechSynthesis?.getVoices?.() || [])];
+  return voices.sort((a, b) => {
+    const aEn = /^en/i.test(a.lang) ? 0 : 1;
+    const bEn = /^en/i.test(b.lang) ? 0 : 1;
+    return aEn - bEn || a.name.localeCompare(b.name);
+  });
+}
+
+// Re-run selection after the pinned voice changes.
+export function refreshVoice() {
+  pickVoice();
+}
+
+export function currentVoiceName() {
+  return voice ? `${voice.name} (${voice.lang})` : 'browser default';
 }
 
 // --- speaking-state tracking ------------------------------------------------
@@ -61,7 +92,8 @@ export function speak(text, { rate = 0.85, pitch = 1.25, interrupt = true } = {}
   if (interrupt) synth.cancel();
   const utter = new SpeechSynthesisUtterance(text);
   if (voice) utter.voice = voice;
-  utter.rate = rate;
+  // per-prompt base rate scaled by the grown-ups speed setting
+  utter.rate = Math.min(2, Math.max(0.1, rate * getSpeechRate()));
   utter.pitch = pitch;
   utter.volume = 1;
 

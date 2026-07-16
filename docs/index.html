@@ -84,8 +84,8 @@
         }
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-DqaNpFDG.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-XA2R-KSj.css">
+    <script type="module" crossorigin src="./assets/index-ByS8XPgo.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-u1MBjb8h.css">
   </head>
   <body class="booting">
     <div id="app-loading">
@@ -184,6 +184,20 @@
             <div class="cfg-segmented">
               <button id="difficulty-easy">😊 Easy</button>
               <button id="difficulty-hard">🏆 Hard</button>
+            </div>
+          </section>
+
+          <section class="cfg-section">
+            <h3>🗣️ Voice</h3>
+            <p class="hint">Voices come from this device's text-to-speech, so the choices differ between phone, tablet, and computer.</p>
+            <select id="voice-select"></select>
+            <div class="cfg-slider-row">
+              <label for="speech-rate">Speed</label>
+              <input id="speech-rate" type="range" min="0.5" max="1.6" step="0.05" />
+              <span id="speech-rate-value">×1.00</span>
+            </div>
+            <div class="cfg-row">
+              <button type="button" id="voice-preview" class="cfg-btn">▶ Preview voice</button>
             </div>
           </section>
 

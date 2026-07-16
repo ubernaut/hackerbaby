@@ -1,7 +1,10 @@
 import { addCustomCard, listCustomCards, deleteCustomCard } from './customCards.js';
 import { toggleBgMusic, getPlaylistId, setPlaylistId, parsePlaylistInput } from './music.js';
-import { getDifficulty, setDifficulty } from './settings.js';
+import { getDifficulty, setDifficulty, getVoiceURI, setVoiceURI, getSpeechRate, setSpeechRate } from './settings.js';
+import { listVoices, refreshVoice, speak } from './speech.js';
 import { unlockAudio } from './audio.js';
+
+const VOICE_SAMPLES = ['B! B is for bubble!', 'Yay! Great job!', 'Can you say dog?', 'D is for dada!'];
 
 const LONG_PRESS_MS = 1200;
 const GATE_CODE = 'config';
@@ -42,6 +45,7 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
     panel.classList.remove('hidden');
     syncHash(true);
     renderList();
+    renderVoices();
   };
   const close = () => {
     panel.classList.add('hidden');
@@ -76,13 +80,6 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
   gateInput.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeGate();
   });
-
-  // --- #config deep link ---
-  const applyHash = () => {
-    if (location.hash === '#config') open();
-  };
-  window.addEventListener('hashchange', applyHash);
-  applyHash();
 
   hotspot.addEventListener('pointerdown', () => {
     pressTimer = setTimeout(open, LONG_PRESS_MS);
@@ -125,6 +122,59 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
     renderDifficulty();
   });
   renderDifficulty();
+
+  // --- voice picker + speed ---
+  const voiceSelect = document.getElementById('voice-select');
+  const voicePreview = document.getElementById('voice-preview');
+  const rateSlider = document.getElementById('speech-rate');
+  const rateValue = document.getElementById('speech-rate-value');
+
+  const sampleSpeak = () => {
+    unlockAudio();
+    speak(VOICE_SAMPLES[Math.floor(Math.random() * VOICE_SAMPLES.length)]);
+  };
+
+  function renderVoices() {
+    const voices = listVoices();
+    const current = getVoiceURI();
+    voiceSelect.innerHTML = '';
+    const auto = document.createElement('option');
+    auto.value = '';
+    auto.textContent = 'Auto (best English voice)';
+    voiceSelect.appendChild(auto);
+    for (const v of voices) {
+      const opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = `${v.name} (${v.lang})`;
+      voiceSelect.appendChild(opt);
+    }
+    voiceSelect.value = current && voices.some((v) => v.voiceURI === current) ? current : '';
+
+    const rate = getSpeechRate();
+    rateSlider.value = String(rate);
+    rateValue.textContent = `×${rate.toFixed(2)}`;
+  }
+
+  voiceSelect.addEventListener('change', () => {
+    setVoiceURI(voiceSelect.value);
+    refreshVoice();
+    sampleSpeak();
+  });
+
+  rateSlider.addEventListener('input', () => {
+    rateValue.textContent = `×${parseFloat(rateSlider.value).toFixed(2)}`;
+  });
+  rateSlider.addEventListener('change', () => {
+    setSpeechRate(parseFloat(rateSlider.value));
+    sampleSpeak();
+  });
+
+  voicePreview.addEventListener('click', sampleSpeak);
+
+  // voices often arrive asynchronously — refresh the list when they land
+  window.speechSynthesis?.addEventListener?.('voiceschanged', () => {
+    if (!panel.classList.contains('hidden')) renderVoices();
+  });
 
   // --- youtube playlist ---
   const playlistForm = document.getElementById('playlist-form');
@@ -197,6 +247,14 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
     renderList();
     onCardsChanged?.();
   });
+
+  // --- #config deep link ---
+  // Runs last: open() touches elements declared throughout this function.
+  const applyHash = () => {
+    if (location.hash === '#config') open();
+  };
+  window.addEventListener('hashchange', applyHash);
+  applyHash();
 
   return {
     isOpen: () => !panel.classList.contains('hidden'),

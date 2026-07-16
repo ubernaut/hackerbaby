@@ -546,6 +546,50 @@ body {
   box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
 }
 
+#parent-card select {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(10, 4, 28, 0.75);
+  color: #fff;
+  outline: none;
+}
+
+#parent-card select:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+}
+
+.cfg-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cfg-slider-row label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.cfg-slider-row input[type='range'] {
+  flex: 1;
+  accent-color: #8b5cf6;
+  cursor: pointer;
+}
+
+.cfg-slider-row span {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  color: #b9a3ff;
+  min-width: 3.2em;
+  text-align: right;
+}
+
 #card-form {
   display: flex;
   flex-direction: column;
