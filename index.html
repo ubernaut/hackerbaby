@@ -217,13 +217,38 @@
             <p class="hint">Add a photo and the word he should say (e.g. “dada”, “mama”).</p>
             <form id="card-form">
               <input id="card-form-word" type="text" placeholder="word (e.g. dada)" required />
-              <input id="card-form-file" type="file" accept="image/*" required />
+              <div class="cfg-row">
+                <input id="card-form-file" type="file" accept="image/*" />
+                <button type="button" id="card-camera" class="cfg-btn">📷 Use camera</button>
+              </div>
+              <div id="camera-capture" class="hidden">
+                <video id="capture-video" autoplay playsinline muted></video>
+                <div class="cfg-row">
+                  <button type="button" id="capture-snap" class="cfg-btn primary">📸 Snap</button>
+                  <button type="button" id="capture-flip" class="cfg-btn">🔄 Flip</button>
+                  <button type="button" id="capture-cancel" class="cfg-btn">Cancel</button>
+                </div>
+              </div>
+              <div id="capture-preview" class="hidden">
+                <img id="capture-preview-img" alt="captured photo" />
+                <button type="button" id="capture-retake" class="cfg-btn">↩️ Retake</button>
+              </div>
               <button type="submit" class="cfg-btn primary">Add card</button>
+              <div id="card-form-status" class="hint status"></div>
             </form>
             <ul id="custom-card-list"></ul>
           </section>
 
           <div id="net-status" class="hint"></div>
+
+          <div id="parent-footer">
+            <a href="https://github.com/ubernaut/hackerbaby" target="_blank" rel="noopener">⭐ hackerbaby on GitHub</a>
+            <p class="hint">
+              Found a bug or have an idea for a new game?
+              <a href="https://github.com/ubernaut/hackerbaby/issues" target="_blank" rel="noopener">File an issue or feature request</a>
+              — they're very welcome!
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@
 // the synth loop whenever YouTube can't load (offline kiosk, blocked, etc.).
 
 import { startMusic as startSynth, stopMusic as stopSynth } from './audio.js';
+import { setMusicEnabled } from './settings.js';
 
 const PLAYLIST_KEY = 'hackerbaby-playlist';
 
@@ -139,12 +140,16 @@ export function stopBgMusic() {
   playing = null;
 }
 
+// Explicit user toggles persist the preference; pause/resume and source
+// switches go through start/stop directly and leave it untouched.
 export function toggleBgMusic() {
   if (playing) {
     stopBgMusic();
+    setMusicEnabled(false);
     return false;
   }
   startBgMusic();
+  setMusicEnabled(true);
   return true;
 }
 

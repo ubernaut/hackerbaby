@@ -37,6 +37,24 @@ export function setVoiceURI(uri) {
   }
 }
 
+const MUSIC_KEY = 'hackerbaby-music';
+
+export function getMusicEnabled() {
+  try {
+    return localStorage.getItem(MUSIC_KEY) !== 'off';
+  } catch (_) {
+    return true;
+  }
+}
+
+export function setMusicEnabled(enabled) {
+  try {
+    localStorage.setItem(MUSIC_KEY, enabled ? 'on' : 'off');
+  } catch (_) {
+    // non-persistent is fine
+  }
+}
+
 const RATE_KEY = 'hackerbaby-speech-rate';
 
 // Multiplier on top of each prompt's base rate; 1 = normal.

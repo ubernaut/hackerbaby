@@ -50,6 +50,7 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
   const close = () => {
     panel.classList.add('hidden');
     syncHash(false);
+    stopCapture();
   };
 
   // --- "type config" gate: also summons the on-screen keyboard on mobile ---
@@ -237,13 +238,114 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
     }
   }
 
+  // --- camera capture for new cards ---
+  const cameraBtn = document.getElementById('card-camera');
+  const captureBox = document.getElementById('camera-capture');
+  const captureVideo = document.getElementById('capture-video');
+  const snapBtn = document.getElementById('capture-snap');
+  const flipBtn = document.getElementById('capture-flip');
+  const captureCancel = document.getElementById('capture-cancel');
+  const previewBox = document.getElementById('capture-preview');
+  const previewImg = document.getElementById('capture-preview-img');
+  const retakeBtn = document.getElementById('capture-retake');
+  const formStatus = document.getElementById('card-form-status');
+
+  let captureStream = null;
+  let capturedBlob = null;
+  let facing = 'user';
+
+  async function startCapture() {
+    stopCapture();
+    clearCaptured();
+    try {
+      captureStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing },
+        audio: false
+      });
+    } catch (err) {
+      formStatus.textContent = 'Camera unavailable — you can still choose a photo file.';
+      return;
+    }
+    captureVideo.srcObject = captureStream;
+    captureVideo.classList.toggle('mirrored', facing === 'user');
+    captureBox.classList.remove('hidden');
+    formStatus.textContent = '';
+  }
+
+  function stopCapture() {
+    if (captureStream) {
+      for (const track of captureStream.getTracks()) track.stop();
+      captureStream = null;
+    }
+    captureVideo.srcObject = null;
+    captureBox.classList.add('hidden');
+  }
+
+  function clearCaptured() {
+    capturedBlob = null;
+    if (previewImg.src) URL.revokeObjectURL(previewImg.src);
+    previewImg.removeAttribute('src');
+    previewBox.classList.add('hidden');
+  }
+
+  cameraBtn.addEventListener('click', startCapture);
+  captureCancel.addEventListener('click', stopCapture);
+
+  flipBtn.addEventListener('click', () => {
+    facing = facing === 'user' ? 'environment' : 'user';
+    startCapture();
+  });
+
+  snapBtn.addEventListener('click', () => {
+    const w = captureVideo.videoWidth;
+    const h = captureVideo.videoHeight;
+    if (!w || !h) return;
+    // cap the stored size so IndexedDB stays lean
+    const scale = Math.min(1, 1024 / Math.max(w, h));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    const g = canvas.getContext('2d');
+    if (facing === 'user') {
+      // save what the mirror preview showed
+      g.translate(canvas.width, 0);
+      g.scale(-1, 1);
+    }
+    g.drawImage(captureVideo, 0, 0, canvas.width, canvas.height);
+    // synchronous encode: the photo must exist the instant Snap is pressed,
+    // so a quick Snap → Add card can't race an async toBlob callback
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+    const bytes = atob(dataUrl.split(',')[1]);
+    const arr = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+    capturedBlob = new Blob([arr], { type: 'image/jpeg' });
+    previewImg.src = URL.createObjectURL(capturedBlob);
+    previewBox.classList.remove('hidden');
+    fileInput.value = '';
+    stopCapture();
+  });
+
+  retakeBtn.addEventListener('click', startCapture);
+
+  // picking a file discards any captured photo
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files?.length) clearCaptured();
+  });
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const word = wordInput.value.trim();
-    const file = fileInput.files?.[0];
-    if (!word || !file) return;
-    await addCustomCard({ word, blob: file });
+    const blob = capturedBlob || fileInput.files?.[0];
+    if (!word) return;
+    if (!blob) {
+      formStatus.textContent = 'Choose a photo file or take one with the camera.';
+      return;
+    }
+    await addCustomCard({ word, blob });
     form.reset();
+    clearCaptured();
+    stopCapture();
+    formStatus.textContent = `Added “${word}”!`;
     renderList();
     onCardsChanged?.();
   });

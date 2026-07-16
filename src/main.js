@@ -8,6 +8,11 @@ import { Mirror } from './mirror.js';
 import { initParentPanel } from './parentPanel.js';
 import { initNet, publishStatus } from './net.js';
 import { getScore, getAllScores, onScoreChange } from './scoreboard.js';
+import { getMusicEnabled } from './settings.js';
+
+// Ask the browser to treat our storage (scores, settings, custom card
+// photos in IndexedDB) as durable instead of evictable under disk pressure.
+navigator.storage?.persist?.().catch(() => {});
 
 // ---- PWA service worker (production builds only, so dev stays uncached) ----
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -285,7 +290,7 @@ if (bootLoader) {
 const startOverlay = document.getElementById('start-overlay');
 document.getElementById('start-button').addEventListener('click', () => {
   unlockAudio();
-  startBgMusic();
+  if (getMusicEnabled()) startBgMusic();
   updateMusicButton(isBgMusicPlaying());
   goFullscreen();
   acquireWakeLock();
