@@ -460,6 +460,35 @@ body {
   animation: bounce 1.4s ease-in-out infinite;
 }
 
+/* ---- hidden youtube music player ---- */
+#yt-holder,
+#yt-holder iframe {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  border: 0;
+}
+
+.parent-row button.selected {
+  background: #00c853;
+  font-weight: 700;
+}
+
+#playlist-form input[type='text'] {
+  width: 100%;
+  font-size: 1rem;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  border: 1px solid #7c4dff;
+  background: #150a2e;
+  color: #fff;
+}
+
 /* ---- big friendly cursor ---- */
 #big-cursor {
   position: fixed;

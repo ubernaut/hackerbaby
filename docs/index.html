@@ -9,8 +9,8 @@
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>Hacker Baby</title>
-    <script type="module" crossorigin src="./assets/index-D8FC7aPR.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BJ2FH20V.css">
+    <script type="module" crossorigin src="./assets/index-B84r5Ocb.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-olJCALMq.css">
   </head>
   <body>
     <canvas id="scene"></canvas>
@@ -47,6 +47,8 @@
       <button id="resume-button">▶</button>
     </div>
 
+    <div id="yt-holder"></div>
+
     <div id="big-cursor" class="hidden">
       <svg viewBox="0 0 32 32" width="72" height="72">
         <path d="M6 2 L6 26 L12.5 20.5 L17 30 L21.5 27.5 L17 18.5 L26 18 Z"
@@ -64,6 +66,22 @@
           <button id="parent-music">Music on/off</button>
           <button id="parent-voice">Repeat prompt</button>
         </div>
+        <h3>Letter game difficulty</h3>
+        <p class="hint">Easy: pressing the right letter always counts, even while mashing. Hard: mashing never advances — he gets coached to press just the one letter.</p>
+        <div class="parent-row">
+          <button id="difficulty-easy">Easy</button>
+          <button id="difficulty-hard">Hard</button>
+        </div>
+        <h3>Background music</h3>
+        <p class="hint">Paste a YouTube playlist link (or ID) to use it as background music. Leave empty for the built-in tunes.</p>
+        <form id="playlist-form">
+          <input id="playlist-input" type="text" placeholder="https://www.youtube.com/playlist?list=..." />
+          <div class="parent-row">
+            <button type="submit">Save playlist</button>
+            <button type="button" id="playlist-clear">Use built-in tunes</button>
+          </div>
+        </form>
+        <div id="playlist-status" class="hint"></div>
         <h3>Custom picture cards</h3>
         <p class="hint">Add a photo and the word he should say (e.g. “dada”, “mama”).</p>
         <form id="card-form">

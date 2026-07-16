@@ -18,8 +18,16 @@ dev, and deploys to GitHub Pages from the `docs/` folder.
 - **🪞 Mirror** — front camera so he can look at himself; tapping takes a
   freeze-frame "photo" with a flash and shutter sound.
 
-Background music is a soft generative pentatonic loop (🎵 button toggles it).
-All sounds are synthesized with WebAudio — no audio assets.
+Background music is a soft generative pentatonic loop (🎵 button toggles it),
+or a YouTube playlist if one is configured in the grown-ups panel. All other
+sounds are synthesized with WebAudio — no audio assets.
+
+The letter game has two difficulties (grown-ups panel):
+
+- **Easy** (default) — pressing the right letter always advances, even
+  mid-mash.
+- **Hard** — mashing never advances; instead he's coached with encouragement
+  like "Almost! Just press B!".
 
 ## Running it
 
@@ -53,6 +61,9 @@ Long-press the **top-left corner** for ~1.2 seconds. From there you can:
 
 - add **custom picture cards** — a photo plus the word he should say
   ("dada", "mama", …). Stored in the browser's IndexedDB.
+- switch the letter game between **Easy and Hard** difficulty.
+- set a **YouTube playlist** as background music (paste any link containing
+  `list=`; falls back to the built-in tunes offline or when cleared).
 - toggle music, re-request fullscreen, repeat the current voice prompt.
 - see PeerCompute connection status.
 

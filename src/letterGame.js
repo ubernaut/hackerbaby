@@ -6,9 +6,18 @@ import { LETTERS, randomWordFor } from './words.js';
 import { playPop, playSuccess, playSad, playWhoosh } from './audio.js';
 import { speak } from './speech.js';
 import { getScore, addScore } from './scoreboard.js';
+import { getDifficulty } from './settings.js';
 
 const MASH_WINDOW_MS = 1500;
 const MASH_THRESHOLD = 5;
+const ENCOURAGE_INTERVAL_MS = 6000;
+
+const ENCOURAGEMENTS = [
+  'Almost! Just press {L}!',
+  'You can do it! Just press {L}!',
+  'So close! One finger — press {L}!',
+  'Slow down, buddy! Just press {L}!'
+];
 const IDLE_REPROMPT_MS = 14000;
 const SHOWER_POOL = 80;
 const CONFETTI_COUNT = 220;
@@ -438,6 +447,17 @@ export class LetterGame {
     if (mashing) playSad();
   }
 
+  _encourage() {
+    const now = performance.now();
+    if (now - (this.lastEncourageAt || 0) < ENCOURAGE_INTERVAL_MS) {
+      playSad();
+      return;
+    }
+    this.lastEncourageAt = now;
+    const phrase = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)];
+    speak(phrase.replaceAll('{L}', this.target), { pitch: 1.3 });
+  }
+
   handleKey(char) {
     if (!this.running || this.celebrating || this.paused) return;
     const mashing = this._trackMash();
@@ -446,7 +466,14 @@ export class LetterGame {
     this.spawnKeyLetter(char);
     playPop();
 
-    if (mashing) {
+    // Easy mode: hitting the right letter always counts, even mid-mash.
+    // Hard mode: mashing never progresses, but he gets coached through it.
+    if (mashing && getDifficulty() === 'hard') {
+      this._encourage();
+      return;
+    }
+
+    if (mashing && char !== this.target) {
       playSad();
       return;
     }

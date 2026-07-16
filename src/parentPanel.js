@@ -1,5 +1,6 @@
 import { addCustomCard, listCustomCards, deleteCustomCard } from './customCards.js';
-import { toggleMusic } from './audio.js';
+import { toggleBgMusic, getPlaylistId, setPlaylistId, parsePlaylistInput } from './music.js';
+import { getDifficulty, setDifficulty } from './settings.js';
 
 const LONG_PRESS_MS = 1200;
 
@@ -37,10 +38,61 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
   });
 
   musicBtn.addEventListener('click', () => {
-    onMusicToggled?.(toggleMusic());
+    onMusicToggled?.(toggleBgMusic());
   });
 
   voiceBtn.addEventListener('click', () => onRepeatPrompt?.());
+
+  // --- difficulty ---
+  const easyBtn = document.getElementById('difficulty-easy');
+  const hardBtn = document.getElementById('difficulty-hard');
+
+  function renderDifficulty() {
+    const mode = getDifficulty();
+    easyBtn.classList.toggle('selected', mode === 'easy');
+    hardBtn.classList.toggle('selected', mode === 'hard');
+  }
+  easyBtn.addEventListener('click', () => {
+    setDifficulty('easy');
+    renderDifficulty();
+  });
+  hardBtn.addEventListener('click', () => {
+    setDifficulty('hard');
+    renderDifficulty();
+  });
+  renderDifficulty();
+
+  // --- youtube playlist ---
+  const playlistForm = document.getElementById('playlist-form');
+  const playlistInput = document.getElementById('playlist-input');
+  const playlistClear = document.getElementById('playlist-clear');
+  const playlistStatus = document.getElementById('playlist-status');
+
+  function renderPlaylistStatus() {
+    const id = getPlaylistId();
+    playlistStatus.textContent = id
+      ? `Using YouTube playlist: ${id}`
+      : 'Using built-in tunes.';
+  }
+
+  playlistForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const id = parsePlaylistInput(playlistInput.value);
+    if (!id) {
+      playlistStatus.textContent = 'Could not find a playlist ID in that — paste a link containing "list=".';
+      return;
+    }
+    setPlaylistId(id);
+    playlistInput.value = '';
+    renderPlaylistStatus();
+  });
+
+  playlistClear.addEventListener('click', () => {
+    setPlaylistId('');
+    renderPlaylistStatus();
+  });
+
+  renderPlaylistStatus();
 
   async function renderList() {
     let cards = [];

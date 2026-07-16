@@ -1,5 +1,6 @@
 import './style.css';
-import { unlockAudio, startMusic, stopMusic, toggleMusic, isMusicPlaying } from './audio.js';
+import { unlockAudio } from './audio.js';
+import { startBgMusic, stopBgMusic, toggleBgMusic, isBgMusicPlaying } from './music.js';
 import { stopSpeaking } from './speech.js';
 import { LetterGame } from './letterGame.js';
 import { PictureGame } from './pictureGame.js';
@@ -133,7 +134,7 @@ const musicBtn = document.getElementById('music-toggle');
 function updateMusicButton(playing) {
   musicBtn.classList.toggle('muted', !playing);
 }
-musicBtn.addEventListener('click', () => updateMusicButton(toggleMusic()));
+musicBtn.addEventListener('click', () => updateMusicButton(toggleBgMusic()));
 
 // ---- pause --------------------------------------------------------------------
 const pauseBtn = document.getElementById('pause-toggle');
@@ -149,12 +150,12 @@ function setPaused(next) {
   mirror.setPaused(paused);
   if (paused) {
     stopSpeaking();
-    musicWasOn = isMusicPlaying();
-    stopMusic();
+    musicWasOn = isBgMusicPlaying();
+    stopBgMusic();
   } else if (musicWasOn) {
-    startMusic();
+    startBgMusic();
   }
-  updateMusicButton(isMusicPlaying());
+  updateMusicButton(isBgMusicPlaying());
   publishStatus({ paused });
 }
 
@@ -237,8 +238,8 @@ window.__hb = { letterGame, pictureGame, setMode: (m) => setMode(m), setPaused: 
 const startOverlay = document.getElementById('start-overlay');
 document.getElementById('start-button').addEventListener('click', () => {
   unlockAudio();
-  startMusic();
-  updateMusicButton(isMusicPlaying());
+  startBgMusic();
+  updateMusicButton(isBgMusicPlaying());
   goFullscreen();
   acquireWakeLock();
   startOverlay.classList.add('hidden');
