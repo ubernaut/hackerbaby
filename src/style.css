@@ -793,10 +793,11 @@ body {
 }
 
 /* invisible but focusable: focusing it summons the mobile keyboard.
-   font-size 16px+ stops iOS from zooming in on focus. */
+   font-size 16px+ stops iOS from zooming in on focus. Anchored at the TOP so
+   the browser never scrolls the page down to reveal it above the keyboard. */
 #kbd-input {
   position: fixed;
-  bottom: 0;
+  top: 4px;
   left: 50%;
   width: 2px;
   height: 2px;
