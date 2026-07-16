@@ -110,11 +110,31 @@ body {
   border: 3px solid rgba(255, 255, 255, 0.35);
   background: rgba(20, 8, 46, 0.65);
   cursor: pointer;
-  transition: transform 0.15s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.1s, background 0.1s;
 }
 
 .mode-btn:active {
-  transform: scale(0.9);
+  transform: scale(0.85);
+  background: rgba(124, 77, 255, 0.6);
+}
+
+/* small / touch screens: wrap into rows and keep targets finger-sized */
+@media (max-width: 720px) {
+  #mode-bar {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 60vw;
+    gap: 8px;
+  }
+
+  .mode-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 1.6rem;
+    border-radius: 16px;
+  }
 }
 
 .mode-btn.active {
@@ -278,7 +298,7 @@ body {
   }
 }
 
-/* ---- parent panel ---- */
+/* ---- grown-ups modal dialogs ---- */
 #parent-hotspot {
   position: fixed;
   top: 0;
@@ -288,80 +308,243 @@ body {
   z-index: 50;
 }
 
-#parent-panel {
-  background: rgba(6, 2, 18, 0.85);
-  z-index: 90;
+#parent-panel,
+#config-gate {
+  background: rgba(8, 3, 22, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 110;
+  animation: modal-backdrop-in 0.2s ease-out;
+}
+
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+#parent-card,
+#config-gate-card {
+  position: relative;
+  background: linear-gradient(165deg, #2b1a4e 0%, #1c0f38 55%, #170b30 100%);
+  color: #f3eaff;
+  border-radius: 26px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  animation: modal-card-in 0.25s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes modal-card-in {
+  from {
+    transform: scale(0.9) translateY(18px);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
 }
 
 #parent-card {
-  background: #241640;
+  width: min(94vw, 560px);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#parent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  background: linear-gradient(90deg, rgba(124, 77, 255, 0.35), rgba(224, 64, 251, 0.18));
+  border-bottom: 1px solid rgba(167, 139, 250, 0.25);
+}
+
+#parent-header h2 {
+  font-size: 1.35rem;
+  letter-spacing: 0.02em;
+}
+
+.cfg-x {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
   color: #f3eaff;
-  border-radius: 24px;
-  border: 2px solid #7c4dff;
-  padding: 28px;
-  width: min(92vw, 520px);
-  max-height: 86vh;
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.cfg-x:hover {
+  background: rgba(255, 82, 82, 0.35);
+  transform: scale(1.08);
+}
+
+#parent-body {
+  padding: 18px 22px 22px;
   overflow-y: auto;
-  font-family: 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  scrollbar-width: thin;
+  scrollbar-color: #7c4dff transparent;
 }
 
-#parent-card h2 {
-  margin-bottom: 12px;
+#parent-body::-webkit-scrollbar {
+  width: 8px;
 }
 
-#parent-card h3 {
-  margin: 18px 0 6px;
+#parent-body::-webkit-scrollbar-thumb {
+  background: #7c4dff;
+  border-radius: 4px;
+}
+
+.cfg-section {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(167, 139, 250, 0.16);
+  border-radius: 18px;
+  padding: 16px 18px;
+}
+
+.cfg-section h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #b9a3ff;
+  margin-bottom: 10px;
 }
 
 #parent-card .hint {
   font-size: 0.85rem;
-  opacity: 0.75;
-  margin-bottom: 10px;
+  line-height: 1.45;
+  opacity: 0.7;
+  margin-bottom: 12px;
 }
 
-.parent-row {
+#parent-card .hint.status {
+  margin: 10px 0 0;
+  color: #8ef0c0;
+  opacity: 0.9;
+}
+
+.cfg-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
-#parent-card button,
-#card-form button {
+.cfg-btn {
   font-family: inherit;
-  font-size: 1rem;
-  padding: 10px 16px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 11px 16px;
   border-radius: 12px;
-  border: none;
-  background: #7c4dff;
-  color: #fff;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(124, 77, 255, 0.22);
+  color: #f3eaff;
   cursor: pointer;
+  transition: background 0.15s, transform 0.1s, border-color 0.15s;
 }
 
-#parent-close {
-  margin-top: 18px;
-  width: 100%;
-  background: #00c853 !important;
+.cfg-btn:hover {
+  background: rgba(124, 77, 255, 0.45);
+  border-color: rgba(167, 139, 250, 0.7);
+}
+
+.cfg-btn:active {
+  transform: scale(0.96);
+}
+
+.cfg-btn.primary {
+  background: linear-gradient(180deg, #8b5cf6, #6d28d9);
+  border-color: transparent;
+}
+
+.cfg-btn.primary:hover {
+  background: linear-gradient(180deg, #9d71ff, #7c3aed);
+}
+
+.cfg-segmented {
+  display: flex;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+}
+
+.cfg-segmented button {
+  flex: 1;
+  font-family: inherit;
+  font-size: 1rem;
   font-weight: 700;
+  padding: 12px;
+  border: none;
+  background: transparent;
+  color: #cbb8ff;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cfg-segmented button + button {
+  border-left: 1px solid rgba(167, 139, 250, 0.35);
+}
+
+.cfg-segmented button.selected {
+  background: linear-gradient(180deg, #34d399, #059669);
+  color: #04310f;
+}
+
+#parent-card input[type='text'] {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(10, 4, 28, 0.75);
+  color: #fff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+#parent-card input[type='text']:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
 }
 
 #card-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: 10px 0;
-}
-
-#card-form input[type='text'] {
-  font-size: 1.1rem;
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid #7c4dff;
-  background: #150a2e;
-  color: #fff;
 }
 
 #card-form input[type='file'] {
   color: #cbb8ff;
+  font-size: 0.9rem;
+}
+
+#card-form input[type='file']::file-selector-button {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 9px 14px;
+  margin-right: 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(124, 77, 255, 0.22);
+  color: #f3eaff;
+  cursor: pointer;
 }
 
 #custom-card-list {
@@ -369,14 +552,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 12px;
 }
 
 #custom-card-list li {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #150a2e;
-  border-radius: 12px;
+  background: rgba(10, 4, 28, 0.6);
+  border: 1px solid rgba(167, 139, 250, 0.16);
+  border-radius: 14px;
   padding: 8px 12px;
 }
 
@@ -384,22 +569,89 @@ body {
   width: 52px;
   height: 52px;
   object-fit: cover;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 #custom-card-list .word {
   flex: 1;
   font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 #custom-card-list button {
-  background: #d32f2f;
-  padding: 6px 12px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 82, 82, 0.4);
+  background: rgba(211, 47, 47, 0.25);
+  color: #ffd7d7;
+  cursor: pointer;
+}
+
+#custom-card-list button:hover {
+  background: rgba(211, 47, 47, 0.55);
 }
 
 #net-status {
-  margin-top: 14px;
+  font-size: 0.8rem;
+  opacity: 0.55;
+  text-align: center;
+}
+
+/* ---- "type config" gate modal ---- */
+#config-gate-card {
+  width: min(92vw, 400px);
+  padding: 30px 28px;
+  text-align: center;
+}
+
+#config-gate-card .cfg-x {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+}
+
+#config-gate-emoji {
+  font-size: 3rem;
+  margin-bottom: 8px;
+}
+
+#config-gate-card h2 {
+  font-size: 1.3rem;
+  margin-bottom: 6px;
+}
+
+#config-gate-card p {
+  font-size: 0.95rem;
+  opacity: 0.75;
+  margin-bottom: 18px;
+}
+
+#config-gate-card strong {
+  color: #ffee58;
+  letter-spacing: 0.08em;
+}
+
+#config-gate-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 1.4rem;
+  text-align: center;
+  letter-spacing: 0.15em;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  background: rgba(10, 4, 28, 0.75);
+  color: #fff;
+  outline: none;
+}
+
+#config-gate-input:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.25);
 }
 
 /* ---- effects layer: shower/confetti above other modes ---- */

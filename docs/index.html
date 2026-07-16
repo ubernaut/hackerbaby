@@ -9,8 +9,8 @@
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>Hacker Baby</title>
-    <script type="module" crossorigin src="./assets/index-jrrGkNid.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CP4lx7Uj.css">
+    <script type="module" crossorigin src="./assets/index-B7iVj8Ws.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Cmy8-8V5.css">
   </head>
   <body>
     <canvas id="scene"></canvas>
@@ -39,6 +39,25 @@
       <button id="music-toggle" class="mode-btn" aria-label="Music">🎵</button>
       <button id="pause-toggle" class="mode-btn" aria-label="Pause">⏸️</button>
       <button id="fullscreen-toggle" class="mode-btn" aria-label="Fullscreen">⛶</button>
+      <button id="config-button" class="mode-btn" aria-label="Settings">⚙️</button>
+    </div>
+
+    <div id="config-gate" class="overlay hidden">
+      <div id="config-gate-card">
+        <button id="config-gate-close" class="cfg-x" aria-label="Close">✕</button>
+        <div id="config-gate-emoji">🔒</div>
+        <h2>Grown-ups only</h2>
+        <p>Type <strong>config</strong> to open the settings</p>
+        <input
+          id="config-gate-input"
+          type="text"
+          autocomplete="off"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
+          placeholder="type here…"
+        />
+      </div>
     </div>
 
     <div id="score-badge" class="hidden">⭐ 0</div>
@@ -53,38 +72,55 @@
 
     <div id="parent-panel" class="overlay hidden">
       <div id="parent-card">
-        <h2>Grown-ups</h2>
-        <div class="parent-row">
-          <button id="parent-fullscreen">Fullscreen</button>
-          <button id="parent-music">Music on/off</button>
-          <button id="parent-voice">Repeat prompt</button>
+        <header id="parent-header">
+          <h2>⚙️ Grown-ups</h2>
+          <button id="parent-close" class="cfg-x" aria-label="Close">✕</button>
+        </header>
+        <div id="parent-body">
+          <section class="cfg-section">
+            <h3>Quick controls</h3>
+            <div class="cfg-row">
+              <button id="parent-fullscreen" class="cfg-btn">⛶&nbsp;Fullscreen</button>
+              <button id="parent-music" class="cfg-btn">🎵&nbsp;Music</button>
+              <button id="parent-voice" class="cfg-btn">🗣️&nbsp;Repeat prompt</button>
+            </div>
+          </section>
+
+          <section class="cfg-section">
+            <h3>🔤 Letter game difficulty</h3>
+            <p class="hint">Easy: pressing the right letter always counts, even while mashing. Hard: mashing never advances — he gets coached to press just the one letter.</p>
+            <div class="cfg-segmented">
+              <button id="difficulty-easy">😊 Easy</button>
+              <button id="difficulty-hard">🏆 Hard</button>
+            </div>
+          </section>
+
+          <section class="cfg-section">
+            <h3>🎶 Background music</h3>
+            <p class="hint">Paste a YouTube playlist link (or ID) to use it as background music. Leave empty for the built-in tunes.</p>
+            <form id="playlist-form">
+              <input id="playlist-input" type="text" placeholder="https://www.youtube.com/playlist?list=..." />
+              <div class="cfg-row">
+                <button type="submit" class="cfg-btn primary">Save playlist</button>
+                <button type="button" id="playlist-clear" class="cfg-btn">Use built-in tunes</button>
+              </div>
+            </form>
+            <div id="playlist-status" class="hint status"></div>
+          </section>
+
+          <section class="cfg-section">
+            <h3>🖼️ Custom picture cards</h3>
+            <p class="hint">Add a photo and the word he should say (e.g. “dada”, “mama”).</p>
+            <form id="card-form">
+              <input id="card-form-word" type="text" placeholder="word (e.g. dada)" required />
+              <input id="card-form-file" type="file" accept="image/*" required />
+              <button type="submit" class="cfg-btn primary">Add card</button>
+            </form>
+            <ul id="custom-card-list"></ul>
+          </section>
+
+          <div id="net-status" class="hint"></div>
         </div>
-        <h3>Letter game difficulty</h3>
-        <p class="hint">Easy: pressing the right letter always counts, even while mashing. Hard: mashing never advances — he gets coached to press just the one letter.</p>
-        <div class="parent-row">
-          <button id="difficulty-easy">Easy</button>
-          <button id="difficulty-hard">Hard</button>
-        </div>
-        <h3>Background music</h3>
-        <p class="hint">Paste a YouTube playlist link (or ID) to use it as background music. Leave empty for the built-in tunes.</p>
-        <form id="playlist-form">
-          <input id="playlist-input" type="text" placeholder="https://www.youtube.com/playlist?list=..." />
-          <div class="parent-row">
-            <button type="submit">Save playlist</button>
-            <button type="button" id="playlist-clear">Use built-in tunes</button>
-          </div>
-        </form>
-        <div id="playlist-status" class="hint"></div>
-        <h3>Custom picture cards</h3>
-        <p class="hint">Add a photo and the word he should say (e.g. “dada”, “mama”).</p>
-        <form id="card-form">
-          <input id="card-form-word" type="text" placeholder="word (e.g. dada)" required />
-          <input id="card-form-file" type="file" accept="image/*" required />
-          <button type="submit">Add card</button>
-        </form>
-        <ul id="custom-card-list"></ul>
-        <div id="net-status" class="hint"></div>
-        <button id="parent-close">Close</button>
       </div>
     </div>
 

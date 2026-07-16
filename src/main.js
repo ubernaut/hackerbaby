@@ -126,15 +126,27 @@ function setMode(mode) {
   publishStatus({ mode, scores: getAllScores() });
 }
 
-modeButtons.letters.addEventListener('click', () => setMode('letters'));
-modeButtons.pictures.addEventListener('click', () => setMode('pictures'));
-modeButtons.mirror.addEventListener('click', () => setMode('mirror'));
+// Instant activation for the top bar: on touch devices `click` waits for
+// pointerup (and feels laggy under little mashing hands), so fire on
+// pointerdown and swallow the trailing click.
+function bindTap(el, handler) {
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    handler();
+  });
+  el.addEventListener('click', (e) => e.preventDefault());
+}
+
+bindTap(modeButtons.letters, () => setMode('letters'));
+bindTap(modeButtons.pictures, () => setMode('pictures'));
+bindTap(modeButtons.mirror, () => setMode('mirror'));
 
 const musicBtn = document.getElementById('music-toggle');
 function updateMusicButton(playing) {
   musicBtn.classList.toggle('muted', !playing);
 }
-musicBtn.addEventListener('click', () => updateMusicButton(toggleBgMusic()));
+bindTap(musicBtn, () => updateMusicButton(toggleBgMusic()));
 
 // ---- pause --------------------------------------------------------------------
 const pauseBtn = document.getElementById('pause-toggle');
@@ -159,8 +171,8 @@ function setPaused(next) {
   publishStatus({ paused });
 }
 
-pauseBtn.addEventListener('click', () => setPaused(!paused));
-document.getElementById('resume-button').addEventListener('click', () => setPaused(false));
+bindTap(pauseBtn, () => setPaused(!paused));
+bindTap(document.getElementById('resume-button'), () => setPaused(false));
 
 // ---- fullscreen -----------------------------------------------------------------
 function goFullscreen() {
@@ -170,7 +182,7 @@ function goFullscreen() {
   }
 }
 
-document.getElementById('fullscreen-toggle').addEventListener('click', () => {
+bindTap(document.getElementById('fullscreen-toggle'), () => {
   if (document.fullscreenElement) {
     document.exitFullscreen?.().catch(() => {});
   } else {
@@ -204,8 +216,10 @@ window.addEventListener('pointercancel', () => document.body.classList.remove('p
 
 // ---- keyboard routing -----------------------------------------------------------
 window.addEventListener('keydown', (e) => {
-  // let the grown-ups panel use the keyboard normally
-  if (parentPanel.isOpen()) return;
+  // let the grown-ups panel and any focused text box use the keyboard normally
+  if (parentPanel.isOpen() || parentPanel.isGateOpen()) return;
+  const active = document.activeElement;
+  if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
 
   e.preventDefault();

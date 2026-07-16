@@ -1,8 +1,10 @@
 import { addCustomCard, listCustomCards, deleteCustomCard } from './customCards.js';
 import { toggleBgMusic, getPlaylistId, setPlaylistId, parsePlaylistInput } from './music.js';
 import { getDifficulty, setDifficulty } from './settings.js';
+import { unlockAudio } from './audio.js';
 
 const LONG_PRESS_MS = 1200;
+const GATE_CODE = 'config';
 
 export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled }) {
   const hotspot = document.getElementById('parent-hotspot');
@@ -16,13 +18,71 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
   const fileInput = document.getElementById('card-form-file');
   const list = document.getElementById('custom-card-list');
 
+  const gate = document.getElementById('config-gate');
+  const gateInput = document.getElementById('config-gate-input');
+  const gateClose = document.getElementById('config-gate-close');
+  const configButton = document.getElementById('config-button');
+
   let pressTimer = null;
 
+  const syncHash = (open) => {
+    try {
+      if (open) {
+        history.replaceState(null, '', '#config');
+      } else if (location.hash === '#config') {
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+    } catch (_) {
+      // history unavailable
+    }
+  };
+
   const open = () => {
+    closeGate();
     panel.classList.remove('hidden');
+    syncHash(true);
     renderList();
   };
-  const close = () => panel.classList.add('hidden');
+  const close = () => {
+    panel.classList.add('hidden');
+    syncHash(false);
+  };
+
+  // --- "type config" gate: also summons the on-screen keyboard on mobile ---
+  const openGate = () => {
+    gate.classList.remove('hidden');
+    gateInput.value = '';
+    gateInput.focus();
+  };
+  const closeGate = () => {
+    gate.classList.add('hidden');
+    gateInput.blur();
+  };
+
+  configButton.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    openGate();
+  });
+  // focus again on click for browsers that only show the keyboard on a
+  // "real" activation event
+  configButton.addEventListener('click', () => gateInput.focus());
+  gateClose.addEventListener('click', closeGate);
+  gate.addEventListener('pointerdown', (e) => {
+    if (e.target === gate) closeGate();
+  });
+  gateInput.addEventListener('input', () => {
+    if (gateInput.value.trim().toLowerCase() === GATE_CODE) open();
+  });
+  gateInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeGate();
+  });
+
+  // --- #config deep link ---
+  const applyHash = () => {
+    if (location.hash === '#config') open();
+  };
+  window.addEventListener('hashchange', applyHash);
+  applyHash();
 
   hotspot.addEventListener('pointerdown', () => {
     pressTimer = setTimeout(open, LONG_PRESS_MS);
@@ -32,12 +92,16 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
   }
 
   closeBtn.addEventListener('click', close);
+  panel.addEventListener('pointerdown', (e) => {
+    if (e.target === panel) close();
+  });
 
   fullscreenBtn.addEventListener('click', () => {
     document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
   });
 
   musicBtn.addEventListener('click', () => {
+    unlockAudio();
     onMusicToggled?.(toggleBgMusic());
   });
 
@@ -136,6 +200,7 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
 
   return {
     isOpen: () => !panel.classList.contains('hidden'),
+    isGateOpen: () => !gate.classList.contains('hidden'),
     open,
     close
   };
