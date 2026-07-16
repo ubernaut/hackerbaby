@@ -1,0 +1,4 @@
+{
+  "_comment": "Optional extra picture cards committed to the repo. Put image files in public/cards/ and reference them here, e.g. {\"word\": \"dada\", \"image\": \"./cards/dada.jpg\", \"alt\": [\"daddy\", \"papa\"]}. You can also add cards at runtime from the grown-ups panel (long-press the top-left corner).",
+  "cards": []
+}

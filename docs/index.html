@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#7c4dff" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <title>Hacker Baby</title>
+    <script type="module" crossorigin src="./assets/index-DXgPxzar.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CTzyO7vG.css">
+  </head>
+  <body>
+    <canvas id="scene"></canvas>
+
+    <div id="picture-mode" class="overlay hidden">
+      <div id="card-stage">
+        <div id="card-picture"></div>
+        <div id="card-word"></div>
+        <div id="mic-status">🎤</div>
+        <div id="card-timer"><div id="card-timer-fill"></div></div>
+      </div>
+    </div>
+
+    <div id="mirror-mode" class="overlay hidden">
+      <div id="mirror-frame">
+        <video id="mirror-video" autoplay playsinline muted></video>
+        <canvas id="mirror-snap" class="hidden"></canvas>
+        <div id="mirror-flash"></div>
+      </div>
+    </div>
+
+    <div id="mode-bar">
+      <button id="mode-letters" class="mode-btn active" aria-label="Letter game">🔤</button>
+      <button id="mode-pictures" class="mode-btn" aria-label="Picture game">🖼️</button>
+      <button id="mode-mirror" class="mode-btn" aria-label="Mirror">🪞</button>
+      <button id="music-toggle" class="mode-btn" aria-label="Music">🎵</button>
+    </div>
+
+    <div id="parent-hotspot" title=""></div>
+
+    <div id="parent-panel" class="overlay hidden">
+      <div id="parent-card">
+        <h2>Grown-ups</h2>
+        <div class="parent-row">
+          <button id="parent-fullscreen">Fullscreen</button>
+          <button id="parent-music">Music on/off</button>
+          <button id="parent-voice">Repeat prompt</button>
+        </div>
+        <h3>Custom picture cards</h3>
+        <p class="hint">Add a photo and the word he should say (e.g. “dada”, “mama”).</p>
+        <form id="card-form">
+          <input id="card-form-word" type="text" placeholder="word (e.g. dada)" required />
+          <input id="card-form-file" type="file" accept="image/*" required />
+          <button type="submit">Add card</button>
+        </form>
+        <ul id="custom-card-list"></ul>
+        <div id="net-status" class="hint"></div>
+        <button id="parent-close">Close</button>
+      </div>
+    </div>
+
+    <div id="start-overlay" class="overlay">
+      <div id="start-inner">
+        <div id="start-title">HACKER&nbsp;BABY</div>
+        <button id="start-button">▶ PLAY</button>
+      </div>
+    </div>
+
+  </body>
+</html>

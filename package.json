@@ -1,0 +1,21 @@
+{
+  "name": "hackerbaby",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "icons": "node scripts/make-icons.mjs"
+  },
+  "dependencies": {
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.1"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
+  }
+}
