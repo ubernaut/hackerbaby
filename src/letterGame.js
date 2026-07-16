@@ -5,6 +5,7 @@ import fontJson from 'three/examples/fonts/helvetiker_bold.typeface.json';
 import { LETTERS, randomWordFor } from './words.js';
 import { playPop, playSuccess, playSad, playWhoosh } from './audio.js';
 import { speak } from './speech.js';
+import { getScore, addScore } from './scoreboard.js';
 
 const MASH_WINDOW_MS = 1500;
 const MASH_THRESHOLD = 5;
@@ -12,38 +13,74 @@ const IDLE_REPROMPT_MS = 14000;
 const SHOWER_POOL = 80;
 const CONFETTI_COUNT = 220;
 
-function makeBackgroundTexture() {
+// Scene themes rotate every letter: background gradient, particle sprite,
+// and particle motion all change so the world keeps feeling new.
+const THEMES = [
+  { name: 'night', colors: ['#31146b', '#1a0b2e', '#0b1e3d'], glow: 'rgba(124, 77, 255, 0.5)', sprite: 'circle', dir: 1, speed: 0.28 },
+  { name: 'ocean', colors: ['#01497c', '#013a63', '#01243d'], glow: 'rgba(64, 196, 255, 0.45)', sprite: 'circle', dir: 1, speed: 0.5 },
+  { name: 'sunset', colors: ['#7a1f5c', '#47102e', '#1f0a2e'], glow: 'rgba(255, 111, 145, 0.45)', sprite: 'heart', dir: -1, speed: 0.22 },
+  { name: 'meadow', colors: ['#0b4d3a', '#06301f', '#021710'], glow: 'rgba(105, 240, 174, 0.4)', sprite: 'circle', dir: 1, speed: 0.14, twinkle: true },
+  { name: 'candy', colors: ['#5f1a89', '#8e1e5f', '#2a1259'], glow: 'rgba(255, 238, 88, 0.4)', sprite: 'star', dir: -1, speed: 0.35 },
+  { name: 'space', colors: ['#0d1b4b', '#091034', '#03071c'], glow: 'rgba(224, 64, 251, 0.4)', sprite: 'star', dir: 0, speed: 0.3, twinkle: true }
+];
+
+function makeBackgroundTexture({ colors, glow }) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
   const g = canvas.getContext('2d');
   const grad = g.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, '#31146b');
-  grad.addColorStop(0.55, '#1a0b2e');
-  grad.addColorStop(1, '#0b1e3d');
+  grad.addColorStop(0, colors[0]);
+  grad.addColorStop(0.55, colors[1]);
+  grad.addColorStop(1, colors[2]);
   g.fillStyle = grad;
   g.fillRect(0, 0, 512, 512);
-  const glow = g.createRadialGradient(256, 200, 20, 256, 200, 300);
-  glow.addColorStop(0, 'rgba(124, 77, 255, 0.5)');
-  glow.addColorStop(1, 'rgba(124, 77, 255, 0)');
-  g.fillStyle = glow;
+  const glowGrad = g.createRadialGradient(256, 200, 20, 256, 200, 300);
+  glowGrad.addColorStop(0, glow);
+  glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  g.fillStyle = glowGrad;
   g.fillRect(0, 0, 512, 512);
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
-function makeCircleSprite() {
+function makeSprite(kind) {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const g = canvas.getContext('2d');
-  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
-  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
-  grad.addColorStop(0.4, 'rgba(255,255,255,0.35)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 64, 64);
+  if (kind === 'star') {
+    g.fillStyle = 'rgba(255,255,255,0.95)';
+    g.translate(32, 34);
+    g.beginPath();
+    for (let i = 0; i < 5; i++) {
+      const outer = ((i * 4 * Math.PI) / 5) - Math.PI / 2;
+      const inner = outer + (2 * Math.PI) / 5;
+      g.lineTo(Math.cos(outer) * 26, Math.sin(outer) * 26);
+      g.lineTo(Math.cos(inner) * 11, Math.sin(inner) * 11);
+    }
+    g.closePath();
+    g.fill();
+  } else if (kind === 'heart') {
+    g.fillStyle = 'rgba(255,255,255,0.95)';
+    g.translate(32, 30);
+    g.beginPath();
+    g.moveTo(0, 8);
+    g.bezierCurveTo(-26, -12, -10, -28, 0, -12);
+    g.bezierCurveTo(10, -28, 26, -12, 0, 8);
+    g.lineTo(0, 22);
+    g.bezierCurveTo(-4, 16, -18, 4, 0, 22);
+    g.closePath();
+    g.fill();
+  } else {
+    const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+    grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+    grad.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+  }
   return new THREE.CanvasTexture(canvas);
 }
 
@@ -52,17 +89,19 @@ export class LetterGame {
     this.canvas = canvas;
     this.onProgress = onProgress || (() => {});
     this.running = false;
-    this.stars = 0;
+    this.paused = false;
+    this.overlayMode = false;
+    this.stars = getScore('letters');
     this.pressTimes = [];
     this.wrongSinceHint = 0;
     this.lastPromptAt = 0;
     this.celebrating = false;
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x000000, 0);
 
     this.scene = new THREE.Scene();
-    this.scene.background = makeBackgroundTexture();
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
     this.camera.position.set(0, 0.4, 11);
@@ -77,14 +116,18 @@ export class LetterGame {
 
     this.font = new FontLoader().parse(fontJson);
     this.geometryCache = new Map();
+    this.spriteCache = new Map();
 
-    this._initBubbles();
+    this._initParticles();
     this._initShower();
     this._initConfetti();
 
     this.letterGroup = new THREE.Group();
     this.scene.add(this.letterGroup);
     this.letterMesh = null;
+
+    this.theme = THEMES[0];
+    this._applyTheme(THEMES[Math.floor(Math.random() * THEMES.length)]);
 
     this.sequence = [...LETTERS].sort(() => Math.random() - 0.5);
     this.sequenceIndex = 0;
@@ -121,12 +164,46 @@ export class LetterGame {
     return geo;
   }
 
-  // --- floating background bubbles ---------------------------------------
+  _sprite(kind) {
+    let tex = this.spriteCache.get(kind);
+    if (!tex) {
+      tex = makeSprite(kind);
+      this.spriteCache.set(kind, tex);
+    }
+    return tex;
+  }
 
-  _initBubbles() {
+  // --- themes ---------------------------------------------------------------
+
+  _applyTheme(theme) {
+    this.theme = theme;
+    this.backgroundTexture = makeBackgroundTexture(theme);
+    if (!this.overlayMode) this.scene.background = this.backgroundTexture;
+    this.particles.material.map = this._sprite(theme.sprite);
+    this.particles.material.needsUpdate = true;
+  }
+
+  _nextTheme() {
+    const options = THEMES.filter((t) => t !== this.theme);
+    this._applyTheme(options[Math.floor(Math.random() * options.length)]);
+  }
+
+  // When another mode's overlay is on top, the canvas turns into a
+  // transparent effects layer: only the key shower and confetti render.
+  setOverlayMode(overlay) {
+    this.overlayMode = overlay;
+    this.scene.background = overlay ? null : this.backgroundTexture;
+    this.letterGroup.visible = !overlay;
+    this.particles.visible = !overlay;
+  }
+
+  // --- floating background particles ---------------------------------------
+
+  _initParticles() {
     const count = 90;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
+    this.particleSeeds = new Float32Array(count);
     const color = new THREE.Color();
     for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 30;
@@ -136,20 +213,40 @@ export class LetterGame {
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
+      this.particleSeeds[i] = Math.random();
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     const mat = new THREE.PointsMaterial({
       size: 0.7,
-      map: makeCircleSprite(),
+      map: this._sprite ? this._sprite('circle') : makeSprite('circle'),
       vertexColors: true,
       transparent: true,
       opacity: 0.7,
       depthWrite: false
     });
-    this.bubbles = new THREE.Points(geo, mat);
-    this.scene.add(this.bubbles);
+    this.particles = new THREE.Points(geo, mat);
+    this.scene.add(this.particles);
+  }
+
+  _updateParticles(dt, t) {
+    const pos = this.particles.geometry.attributes.position;
+    const { dir, speed, twinkle } = this.theme;
+    for (let i = 0; i < pos.count; i++) {
+      const seed = this.particleSeeds[i];
+      let y = pos.getY(i) + dt * dir * (speed + seed * speed * 2);
+      // drift sideways a little so even dir:0 themes feel alive
+      let x = pos.getX(i) + Math.sin(t * (0.3 + seed) + seed * 20) * dt * 0.4;
+      if (y > 9.5) y = -9.5;
+      if (y < -9.5) y = 9.5;
+      if (x > 16) x = -16;
+      if (x < -16) x = 16;
+      pos.setY(i, y);
+      pos.setX(i, x);
+    }
+    pos.needsUpdate = true;
+    this.particles.material.opacity = twinkle ? 0.45 + Math.sin(t * 2.4) * 0.3 : 0.7;
   }
 
   // --- key shower ----------------------------------------------------------
@@ -303,6 +400,7 @@ export class LetterGame {
       this.sequence.sort(() => Math.random() - 0.5);
     }
     this.target = this.sequence[this.sequenceIndex];
+    this._nextTheme();
     this._showLetter(this.target);
     this._promptLetter();
     this.onProgress({ letter: this.target, stars: this.stars });
@@ -310,7 +408,7 @@ export class LetterGame {
 
   _celebrate() {
     this.celebrating = true;
-    this.stars += 1;
+    this.stars = addScore('letters');
     playSuccess();
     this.burstConfetti();
     const word = this.currentWord;
@@ -323,12 +421,26 @@ export class LetterGame {
 
   // --- input -----------------------------------------------------------------
 
-  handleKey(char) {
-    if (!this.running || this.celebrating) return;
+  _trackMash() {
     const now = performance.now();
     this.pressTimes.push(now);
     this.pressTimes = this.pressTimes.filter((t) => now - t < MASH_WINDOW_MS);
-    const mashing = this.pressTimes.length >= MASH_THRESHOLD;
+    return this.pressTimes.length >= MASH_THRESHOLD;
+  }
+
+  // Keys pressed outside the letter game still shower the screen festively
+  // (and still earn the sad noise for mashing), they just don't play the game.
+  handleAmbientKey(char) {
+    if (this.paused) return;
+    const mashing = this._trackMash();
+    this.spawnKeyLetter(char);
+    playPop();
+    if (mashing) playSad();
+  }
+
+  handleKey(char) {
+    if (!this.running || this.celebrating || this.paused) return;
+    const mashing = this._trackMash();
 
     // every press rains down in festive colors
     this.spawnKeyLetter(char);
@@ -344,6 +456,7 @@ export class LetterGame {
       this._celebrate();
     } else {
       this.wrongSinceHint += 1;
+      const now = performance.now();
       if (this.wrongSinceHint >= 4 && now - this.lastPromptAt > 6000) {
         this.wrongSinceHint = 0;
         this._promptLetter({ newWord: true });
@@ -367,6 +480,10 @@ export class LetterGame {
     this.running = false;
   }
 
+  setPaused(paused) {
+    this.paused = paused;
+  }
+
   _resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -376,19 +493,18 @@ export class LetterGame {
   }
 
   _tick() {
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const dt = this.paused ? 0 : Math.min(this.clock.getDelta(), 0.05);
+    if (this.paused) {
+      this.clock.getDelta();
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
     const t = this.clock.elapsedTime;
 
     this.lightA.position.set(Math.sin(t * 0.7) * 7, Math.cos(t * 0.9) * 4, 4);
     this.lightB.position.set(Math.cos(t * 0.5) * -7, Math.sin(t * 0.8) * 4, 4);
 
-    const pos = this.bubbles.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      let y = pos.getY(i) + dt * (0.2 + (i % 5) * 0.08);
-      if (y > 9) y = -9;
-      pos.setY(i, y);
-    }
-    pos.needsUpdate = true;
+    this._updateParticles(dt, t);
 
     if (this.letterMesh) {
       const age = t - this.letterBorn;

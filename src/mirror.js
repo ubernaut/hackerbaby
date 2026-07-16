@@ -27,6 +27,12 @@ export class Mirror {
     }
   }
 
+  setPaused(paused) {
+    if (!this.videoEl.srcObject) return;
+    if (paused) this.videoEl.pause();
+    else this.videoEl.play().catch(() => {});
+  }
+
   stop() {
     if (this.stream) {
       for (const track of this.stream.getTracks()) track.stop();

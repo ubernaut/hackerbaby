@@ -16,6 +16,45 @@ if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = pickVoice;
 }
 
+// --- speaking-state tracking ------------------------------------------------
+// The picture game must not "hear" the app's own voice through the mic, so we
+// track exactly when synthesis is active and let listeners subscribe.
+
+const speechHandlers = new Set();
+const pendingUtterances = new Set();
+let lastSpeechEndAt = 0;
+
+export function onSpeechActivity(handler) {
+  speechHandlers.add(handler);
+  return () => speechHandlers.delete(handler);
+}
+
+function emit(event) {
+  for (const handler of speechHandlers) {
+    try {
+      handler(event);
+    } catch (_) {
+      // listener errors shouldn't break speech
+    }
+  }
+}
+
+function settleUtterance(utter) {
+  if (!pendingUtterances.has(utter)) return;
+  pendingUtterances.delete(utter);
+  if (utter._safetyTimer) clearTimeout(utter._safetyTimer);
+  if (pendingUtterances.size === 0) {
+    lastSpeechEndAt = performance.now();
+    emit('end');
+  }
+}
+
+export function isSpeechActive(graceMs = 1200) {
+  if (pendingUtterances.size > 0) return true;
+  if (window.speechSynthesis?.speaking) return true;
+  return performance.now() - lastSpeechEndAt < graceMs;
+}
+
 export function speak(text, { rate = 0.85, pitch = 1.25, interrupt = true } = {}) {
   const synth = window.speechSynthesis;
   if (!synth) return;
@@ -25,11 +64,21 @@ export function speak(text, { rate = 0.85, pitch = 1.25, interrupt = true } = {}
   utter.rate = rate;
   utter.pitch = pitch;
   utter.volume = 1;
+
+  if (pendingUtterances.size === 0) emit('start');
+  pendingUtterances.add(utter);
+  utter.onend = () => settleUtterance(utter);
+  utter.onerror = () => settleUtterance(utter);
+  // Safety net: in environments where onend never fires (no voices, muted
+  // synth), clear after roughly how long the phrase could take to say.
+  utter._safetyTimer = setTimeout(() => settleUtterance(utter), 1500 + text.length * 90);
+
   synth.speak(utter);
 }
 
 export function stopSpeaking() {
   window.speechSynthesis?.cancel();
+  for (const utter of [...pendingUtterances]) settleUtterance(utter);
 }
 
 // --- recognition ----------------------------------------------------------

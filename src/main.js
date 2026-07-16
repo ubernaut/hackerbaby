@@ -1,10 +1,12 @@
 import './style.css';
-import { unlockAudio, startMusic, toggleMusic, isMusicPlaying, playPop } from './audio.js';
+import { unlockAudio, startMusic, stopMusic, toggleMusic, isMusicPlaying } from './audio.js';
+import { stopSpeaking } from './speech.js';
 import { LetterGame } from './letterGame.js';
 import { PictureGame } from './pictureGame.js';
 import { Mirror } from './mirror.js';
 import { initParentPanel } from './parentPanel.js';
 import { initNet, publishStatus } from './net.js';
+import { getScore, getAllScores, onScoreChange } from './scoreboard.js';
 
 // ---- PWA service worker (production builds only, so dev stays uncached) ----
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
@@ -14,16 +16,20 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 }
 
 // ---- pieces ----------------------------------------------------------------
-const letterGame = new LetterGame(document.getElementById('scene'), {
+const sceneCanvas = document.getElementById('scene');
+
+const letterGame = new LetterGame(sceneCanvas, {
   onProgress: ({ letter, stars }) => publishStatus({ mode: currentMode, letter, stars })
 });
 
 const pictureGame = new PictureGame({
+  overlayEl: document.getElementById('picture-mode'),
   pictureEl: document.getElementById('card-picture'),
   wordEl: document.getElementById('card-word'),
   micEl: document.getElementById('mic-status'),
   timerFillEl: document.getElementById('card-timer-fill'),
-  onProgress: ({ card }) => publishStatus({ mode: currentMode, card })
+  onProgress: ({ card }) => publishStatus({ mode: currentMode, card }),
+  onCelebrate: () => letterGame.burstConfetti()
 });
 
 const mirror = new Mirror({
@@ -47,6 +53,28 @@ const parentPanel = initParentPanel({
   onMusicToggled: (playing) => updateMusicButton(playing)
 });
 
+// ---- score badge -------------------------------------------------------------
+const scoreBadge = document.getElementById('score-badge');
+
+function updateScoreBadge() {
+  if (currentMode === 'mirror' || !started) {
+    scoreBadge.classList.add('hidden');
+    return;
+  }
+  scoreBadge.classList.remove('hidden');
+  scoreBadge.textContent = `⭐ ${getScore(currentMode)}`;
+}
+
+onScoreChange((game) => {
+  updateScoreBadge();
+  if (game === currentMode) {
+    scoreBadge.classList.remove('pop');
+    void scoreBadge.offsetWidth;
+    scoreBadge.classList.add('pop');
+  }
+  publishStatus({ scores: getAllScores() });
+});
+
 // ---- mode switching ---------------------------------------------------------
 const overlays = {
   pictures: document.getElementById('picture-mode'),
@@ -60,9 +88,12 @@ const modeButtons = {
 
 let currentMode = 'letters';
 let started = false;
+let paused = false;
+let musicWasOn = false;
 
 function setMode(mode) {
   if (mode === currentMode && started) return;
+  if (paused) setPaused(false);
   // tear down the old mode
   letterGame.stop();
   pictureGame.stop();
@@ -75,6 +106,12 @@ function setMode(mode) {
     btn.classList.toggle('active', name === mode);
   }
 
+  // outside the letter game the canvas becomes a transparent effects layer
+  // on top, so key showers and confetti rain over every mode
+  const overlayMode = mode !== 'letters';
+  letterGame.setOverlayMode(overlayMode);
+  sceneCanvas.classList.toggle('fx-layer', overlayMode);
+
   if (mode === 'letters') {
     letterGame.start();
   } else if (mode === 'pictures') {
@@ -84,7 +121,8 @@ function setMode(mode) {
     overlays.mirror.classList.remove('hidden');
     mirror.start();
   }
-  publishStatus({ mode });
+  updateScoreBadge();
+  publishStatus({ mode, scores: getAllScores() });
 }
 
 modeButtons.letters.addEventListener('click', () => setMode('letters'));
@@ -96,6 +134,48 @@ function updateMusicButton(playing) {
   musicBtn.classList.toggle('muted', !playing);
 }
 musicBtn.addEventListener('click', () => updateMusicButton(toggleMusic()));
+
+// ---- pause --------------------------------------------------------------------
+const pauseBtn = document.getElementById('pause-toggle');
+const pauseOverlay = document.getElementById('pause-overlay');
+
+function setPaused(next) {
+  if (!started || paused === next) return;
+  paused = next;
+  pauseOverlay.classList.toggle('hidden', !paused);
+  pauseBtn.textContent = paused ? '▶️' : '⏸️';
+  letterGame.setPaused(paused);
+  pictureGame.setPaused(paused);
+  mirror.setPaused(paused);
+  if (paused) {
+    stopSpeaking();
+    musicWasOn = isMusicPlaying();
+    stopMusic();
+  } else if (musicWasOn) {
+    startMusic();
+  }
+  updateMusicButton(isMusicPlaying());
+  publishStatus({ paused });
+}
+
+pauseBtn.addEventListener('click', () => setPaused(!paused));
+document.getElementById('resume-button').addEventListener('click', () => setPaused(false));
+
+// ---- fullscreen -----------------------------------------------------------------
+function goFullscreen() {
+  const el = document.documentElement;
+  if (!document.fullscreenElement) {
+    el.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
+  }
+}
+
+document.getElementById('fullscreen-toggle').addEventListener('click', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch(() => {});
+  } else {
+    goFullscreen();
+  }
+});
 
 // ---- kiosk behaviors ----------------------------------------------------------
 let wakeLock = null;
@@ -110,14 +190,25 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && started) acquireWakeLock();
 });
 
-function goFullscreen() {
-  const el = document.documentElement;
-  if (!document.fullscreenElement) {
-    el.requestFullscreen?.({ navigationUI: 'hide' }).catch(() => {});
-  }
-}
-
 document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ---- big friendly cursor ---------------------------------------------------------
+const bigCursor = document.getElementById('big-cursor');
+let cursorSeen = false;
+
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || !started) return;
+  if (!cursorSeen) {
+    cursorSeen = true;
+    bigCursor.classList.remove('hidden');
+  }
+  bigCursor.style.left = `${e.clientX - 13}px`;
+  bigCursor.style.top = `${e.clientY - 4}px`;
+});
+window.addEventListener('pointerdown', (e) => {
+  if (e.pointerType === 'mouse') bigCursor.classList.add('pressed');
+});
+window.addEventListener('pointerup', () => bigCursor.classList.remove('pressed'));
 
 // ---- keyboard routing -----------------------------------------------------------
 window.addEventListener('keydown', (e) => {
@@ -127,23 +218,22 @@ window.addEventListener('keydown', (e) => {
 
   e.preventDefault();
 
-  if (!started) return;
+  if (!started || paused) return;
   const char = e.key.length === 1 ? e.key.toUpperCase() : '';
   if (!/^[A-Z0-9]$/.test(char)) return;
 
   if (currentMode === 'letters') {
     letterGame.handleKey(char);
   } else {
-    // keys are still fun outside the letter game
-    letterGame.spawnKeyLetter(char);
-    playPop();
+    // keys rain down festively over every mode (mash still gets the sad noise)
+    letterGame.handleAmbientKey(char);
   }
 });
 
-// ---- boot ------------------------------------------------------------------------
 // small debug handle for smoke tests / parent tinkering
-window.__hb = { letterGame, pictureGame, setMode: (m) => setMode(m) };
+window.__hb = { letterGame, pictureGame, setMode: (m) => setMode(m), setPaused: (p) => setPaused(p) };
 
+// ---- boot ------------------------------------------------------------------------
 const startOverlay = document.getElementById('start-overlay');
 document.getElementById('start-button').addEventListener('click', () => {
   unlockAudio();
@@ -155,6 +245,7 @@ document.getElementById('start-button').addEventListener('click', () => {
   document.body.classList.add('playing');
   started = true;
   letterGame.start();
+  updateScoreBadge();
   initNet({
     onStatus: (text) => {
       const el = document.getElementById('net-status');

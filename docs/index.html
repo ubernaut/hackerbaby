@@ -9,8 +9,8 @@
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
     <title>Hacker Baby</title>
-    <script type="module" crossorigin src="./assets/index-DXgPxzar.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CTzyO7vG.css">
+    <script type="module" crossorigin src="./assets/index-D8FC7aPR.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BJ2FH20V.css">
   </head>
   <body>
     <canvas id="scene"></canvas>
@@ -37,6 +37,21 @@
       <button id="mode-pictures" class="mode-btn" aria-label="Picture game">🖼️</button>
       <button id="mode-mirror" class="mode-btn" aria-label="Mirror">🪞</button>
       <button id="music-toggle" class="mode-btn" aria-label="Music">🎵</button>
+      <button id="pause-toggle" class="mode-btn" aria-label="Pause">⏸️</button>
+      <button id="fullscreen-toggle" class="mode-btn" aria-label="Fullscreen">⛶</button>
+    </div>
+
+    <div id="score-badge" class="hidden">⭐ 0</div>
+
+    <div id="pause-overlay" class="overlay hidden">
+      <button id="resume-button">▶</button>
+    </div>
+
+    <div id="big-cursor" class="hidden">
+      <svg viewBox="0 0 32 32" width="72" height="72">
+        <path d="M6 2 L6 26 L12.5 20.5 L17 30 L21.5 27.5 L17 18.5 L26 18 Z"
+              fill="#ffee58" stroke="#4a148c" stroke-width="2.5" stroke-linejoin="round" />
+      </svg>
     </div>
 
     <div id="parent-hotspot" title=""></div>
