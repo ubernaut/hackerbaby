@@ -194,22 +194,13 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('contextmenu', (e) => e.preventDefault());
 
 // ---- big friendly cursor ---------------------------------------------------------
-const bigCursor = document.getElementById('big-cursor');
-let cursorSeen = false;
-
-window.addEventListener('pointermove', (e) => {
-  if (e.pointerType !== 'mouse' || !started) return;
-  if (!cursorSeen) {
-    cursorSeen = true;
-    bigCursor.classList.remove('hidden');
-  }
-  bigCursor.style.left = `${e.clientX - 13}px`;
-  bigCursor.style.top = `${e.clientY - 4}px`;
-});
+// The cursor itself is a native CSS cursor (see style.css) so it has zero
+// input lag; these listeners only swap in the "squished" variant on click.
 window.addEventListener('pointerdown', (e) => {
-  if (e.pointerType === 'mouse') bigCursor.classList.add('pressed');
+  if (e.pointerType === 'mouse') document.body.classList.add('pressed');
 });
-window.addEventListener('pointerup', () => bigCursor.classList.remove('pressed'));
+window.addEventListener('pointerup', () => document.body.classList.remove('pressed'));
+window.addEventListener('pointercancel', () => document.body.classList.remove('pressed'));
 
 // ---- keyboard routing -----------------------------------------------------------
 window.addEventListener('keydown', (e) => {
