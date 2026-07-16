@@ -21,6 +21,8 @@ const ENCOURAGEMENTS = [
 const IDLE_REPROMPT_MS = 14000;
 const SHOWER_POOL = 80;
 const CONFETTI_COUNT = 220;
+const SPARKLE_POOL = 140;
+const SPARKLE_Z = 4; // world plane the trail lives on, in front of the letter
 
 // Scene themes rotate every letter: background gradient, particle sprite,
 // and particle motion all change so the world keeps feeling new.
@@ -130,6 +132,8 @@ export class LetterGame {
     this._initParticles();
     this._initShower();
     this._initConfetti();
+    this._initSparkles();
+    this._initPointerTracking();
 
     this.letterGroup = new THREE.Group();
     this.scene.add(this.letterGroup);
@@ -213,6 +217,7 @@ export class LetterGame {
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     this.particleSeeds = new Float32Array(count);
+    this.particleVel = new Float32Array(count * 2);
     const color = new THREE.Color();
     for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() - 0.5) * 30;
@@ -242,20 +247,175 @@ export class LetterGame {
   _updateParticles(dt, t) {
     const pos = this.particles.geometry.attributes.position;
     const { dir, speed, twinkle } = this.theme;
+    const ray = this.pointerActive ? this._pointerRay() : null;
+    const damp = Math.exp(-2.2 * dt);
     for (let i = 0; i < pos.count; i++) {
       const seed = this.particleSeeds[i];
-      let y = pos.getY(i) + dt * dir * (speed + seed * speed * 2);
-      // drift sideways a little so even dir:0 themes feel alive
-      let x = pos.getX(i) + Math.sin(t * (0.3 + seed) + seed * 20) * dt * 0.4;
+      let x = pos.getX(i);
+      let y = pos.getY(i);
+      let vx = this.particleVel[i * 2];
+      let vy = this.particleVel[i * 2 + 1];
+
+      // pointer influence: some particles are curious, some are shy
+      if (ray) {
+        const z = pos.getZ(i);
+        const rt = (z - ray.origin.z) / ray.dir.z;
+        const tx = ray.origin.x + ray.dir.x * rt;
+        const ty = ray.origin.y + ray.dir.y * rt;
+        const dx = tx - x;
+        const dy = ty - y;
+        const dist = Math.hypot(dx, dy);
+        const radius = 8;
+        if (dist < radius && dist > 0.001) {
+          const falloff = 1 - dist / radius;
+          if (seed < 0.45) {
+            // follower: drifts toward the pointer
+            const pull = 5 * falloff * dt;
+            vx += (dx / dist) * pull;
+            vy += (dy / dist) * pull;
+          } else if (seed > 0.7) {
+            // avoider: scoots away, more urgently the closer it gets
+            const push = 9 * falloff * falloff * dt;
+            vx -= (dx / dist) * push;
+            vy -= (dy / dist) * push;
+          }
+        }
+      }
+
+      vx *= damp;
+      vy *= damp;
+      x += vx + Math.sin(t * (0.3 + seed) + seed * 20) * dt * 0.4;
+      y += vy + dt * dir * (speed + seed * speed * 2);
+
       if (y > 9.5) y = -9.5;
       if (y < -9.5) y = 9.5;
       if (x > 16) x = -16;
       if (x < -16) x = 16;
-      pos.setY(i, y);
+      this.particleVel[i * 2] = vx;
+      this.particleVel[i * 2 + 1] = vy;
       pos.setX(i, x);
+      pos.setY(i, y);
     }
     pos.needsUpdate = true;
     this.particles.material.opacity = twinkle ? 0.45 + Math.sin(t * 2.4) * 0.3 : 0.7;
+  }
+
+  // --- pointer tracking + sparkle trail --------------------------------------
+
+  _initPointerTracking() {
+    this.pointerNdc = new THREE.Vector2();
+    this.pointerActive = false;
+    this.lastSparkleWorld = null;
+    window.addEventListener('pointermove', (e) => {
+      this.pointerNdc.set((e.clientX / window.innerWidth) * 2 - 1, -(e.clientY / window.innerHeight) * 2 + 1);
+      this.pointerActive = true;
+    });
+    window.addEventListener('pointerleave', () => {
+      this.pointerActive = false;
+      this.lastSparkleWorld = null;
+    });
+    document.addEventListener('mouseleave', () => {
+      this.pointerActive = false;
+      this.lastSparkleWorld = null;
+    });
+  }
+
+  _pointerRay() {
+    const origin = this.camera.position;
+    const target = new THREE.Vector3(this.pointerNdc.x, this.pointerNdc.y, 0.5).unproject(this.camera);
+    const dir = target.sub(origin).normalize();
+    return { origin, dir };
+  }
+
+  _pointerWorldAt(z) {
+    const ray = this._pointerRay();
+    if (Math.abs(ray.dir.z) < 1e-6) return null;
+    const t = (z - ray.origin.z) / ray.dir.z;
+    return new THREE.Vector3().copy(ray.dir).multiplyScalar(t).add(ray.origin);
+  }
+
+  _initSparkles() {
+    const positions = new Float32Array(SPARKLE_POOL * 3);
+    const colors = new Float32Array(SPARKLE_POOL * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.42,
+      map: this._sprite('star'),
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      // additive: fading a color to black fades the sparkle to invisible
+      blending: THREE.AdditiveBlending
+    });
+    this.sparkles = new THREE.Points(geo, mat);
+    this.sparkles.frustumCulled = false;
+    this.scene.add(this.sparkles);
+    this.sparkleState = new Array(SPARKLE_POOL).fill(null).map(() => ({
+      life: 0,
+      maxLife: 1,
+      vel: new THREE.Vector3(),
+      color: new THREE.Color(0, 0, 0)
+    }));
+    this.sparkleCursor = 0;
+  }
+
+  _spawnSparkle(world) {
+    const i = this.sparkleCursor;
+    this.sparkleCursor = (this.sparkleCursor + 1) % SPARKLE_POOL;
+    const s = this.sparkleState[i];
+    s.maxLife = 0.5 + Math.random() * 0.6;
+    s.life = s.maxLife;
+    s.color.setHSL(Math.random(), 0.9, 0.65);
+    s.vel.set((Math.random() - 0.5) * 1.6, 0.4 + Math.random() * 1.2, (Math.random() - 0.5) * 0.6);
+    const pos = this.sparkles.geometry.attributes.position;
+    pos.setXYZ(
+      i,
+      world.x + (Math.random() - 0.5) * 0.35,
+      world.y + (Math.random() - 0.5) * 0.35,
+      world.z + (Math.random() - 0.5) * 0.5
+    );
+  }
+
+  _updateSparkles(dt) {
+    // spawn along the pointer's path so fast swipes leave a full trail
+    if (this.pointerActive && !this.paused) {
+      const world = this._pointerWorldAt(SPARKLE_Z);
+      if (world) {
+        const prev = this.lastSparkleWorld;
+        if (!prev) {
+          this.lastSparkleWorld = world.clone();
+        } else {
+          const moved = world.distanceTo(prev);
+          if (moved > 0.12) {
+            const steps = Math.min(6, Math.max(1, Math.floor(moved / 0.25)));
+            for (let k = 1; k <= steps; k++) {
+              this._spawnSparkle(new THREE.Vector3().lerpVectors(prev, world, k / steps));
+            }
+            this.lastSparkleWorld.copy(world);
+          }
+        }
+      }
+    }
+
+    const pos = this.sparkles.geometry.attributes.position;
+    const col = this.sparkles.geometry.attributes.color;
+    for (let i = 0; i < SPARKLE_POOL; i++) {
+      const s = this.sparkleState[i];
+      if (s.life <= 0) {
+        col.setXYZ(i, 0, 0, 0);
+        continue;
+      }
+      s.life -= dt;
+      s.vel.y -= 1.2 * dt;
+      pos.setXYZ(i, pos.getX(i) + s.vel.x * dt, pos.getY(i) + s.vel.y * dt, pos.getZ(i) + s.vel.z * dt);
+      const fade = Math.max(0, s.life / s.maxLife);
+      const flicker = 0.75 + Math.random() * 0.25;
+      col.setXYZ(i, s.color.r * fade * flicker, s.color.g * fade * flicker, s.color.b * fade * flicker);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
   }
 
   // --- key shower ----------------------------------------------------------
@@ -556,6 +716,7 @@ export class LetterGame {
 
     this._updateShower(dt);
     this._updateConfetti(dt);
+    this._updateSparkles(dt);
     this.renderer.render(this.scene, this.camera);
   }
 }
