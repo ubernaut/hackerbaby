@@ -1,11 +1,14 @@
-// Hacker Baby — terminal edition. A console port of the web letter game,
-// built on the sibling deno_tui fork (../../deno_tui). The big 3D letter
-// becomes a chunky block-font glyph, the key shower and confetti become
-// falling colored characters, and speech goes through espeak/spd-say.
+// Hacker Baby — terminal edition. A console port of the web app on the
+// sibling deno_tui fork (../../deno_tui), with all three game modes:
 //
-//   deno task play           # easy mode (right letter always counts)
-//   deno task play:hard      # mashing never advances, coaches instead
-//   deno task play:quiet     # no text-to-speech
+//   F1  letter game    — big block letter, press the right key
+//   F2  picture game   — ASCII-art cards; TYPE the word (no mic in a tty)
+//   F3  mirror         — live ASCII webcam via ffmpeg (or a silly face)
+//
+//   deno task play             # easy mode
+//   deno task play:hard        # mashing never advances, coaches instead
+//   deno task play:quiet       # no text-to-speech
+//   deno task play -- --mode=pictures   # boot straight into a mode
 //
 // Ctrl+C or Ctrl+Q quits. Scores persist to .state.json next to this file.
 
@@ -14,71 +17,152 @@ import { Tui } from "tui/src/tui.ts";
 import { handleInput } from "tui/src/input.ts";
 import { Text } from "tui/src/components/text.ts";
 import { Computed, Signal } from "tui/src/signals/mod.ts";
-import { LETTERS, randomWordFor, shuffle } from "../src/words.js";
-import { GLYPH_HEIGHT, GLYPH_WIDTH, renderGlyph } from "./font.ts";
 import { createSpeaker } from "./speech.ts";
+import type { Ctx, GameMode, SavedState } from "./context.ts";
+import { createLetterMode } from "./letterMode.ts";
+import { createPictureMode } from "./pictureMode.ts";
+import { createMirrorMode } from "./mirrorMode.ts";
 
 // ---------- settings & persistence ------------------------------------------
 
 const STATE_FILE = new URL("./.state.json", import.meta.url);
 
-interface SavedState {
-  stars: number;
-  difficulty: "easy" | "hard";
-}
-
 function loadState(): SavedState {
   try {
     const parsed = JSON.parse(Deno.readTextFileSync(STATE_FILE));
+    const scores = parsed.scores ?? {};
     return {
-      stars: Number.isFinite(parsed.stars) ? parsed.stars : 0,
+      scores: {
+        // migrate the original single-score format ({stars: n})
+        letters: Number.isFinite(scores.letters) ? scores.letters : (Number.isFinite(parsed.stars) ? parsed.stars : 0),
+        pictures: Number.isFinite(scores.pictures) ? scores.pictures : 0,
+      },
       difficulty: parsed.difficulty === "hard" ? "hard" : "easy",
     };
   } catch (_) {
-    return { stars: 0, difficulty: "easy" };
-  }
-}
-
-function saveState(state: SavedState) {
-  try {
-    Deno.writeTextFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-  } catch (_) {
-    // read-only filesystem — scores just won't persist
+    return { scores: { letters: 0, pictures: 0 }, difficulty: "easy" };
   }
 }
 
 const state = loadState();
 if (Deno.args.includes("--hard")) state.difficulty = "hard";
 if (Deno.args.includes("--easy")) state.difficulty = "easy";
-saveState(state);
+
+function saveState() {
+  try {
+    Deno.writeTextFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  } catch (_) {
+    // read-only filesystem — scores just won't persist
+  }
+}
+saveState();
 
 const voiceEnabled = !Deno.args.includes("--no-voice");
 const speaker = await createSpeaker(voiceEnabled);
 
-// ---------- game constants ----------------------------------------------------
+// ---------- tui setup -----------------------------------------------------------
 
-const MASH_WINDOW_MS = 1500;
-const MASH_THRESHOLD = 5;
-const IDLE_REPROMPT_MS = 15000;
-const CELEBRATE_MS = 2600;
-const ENCOURAGE_INTERVAL_MS = 6000;
 const TICK_MS = 50;
 
-const ENCOURAGEMENTS = [
-  "Almost! Just press {L}!",
-  "You can do it! Just press {L}!",
-  "So close! One finger... press {L}!",
-  "Slow down, buddy! Just press {L}!",
-];
+const tui = new Tui({
+  style: crayon.bgBlack,
+  refreshRate: 1000 / 30,
+});
+handleInput(tui);
+tui.dispatch();
+tui.run();
 
-const LETTER_COLORS = [
-  crayon.bgBlack.lightRed.bold,
-  crayon.bgBlack.lightYellow.bold,
-  crayon.bgBlack.lightGreen.bold,
-  crayon.bgBlack.lightCyan.bold,
-  crayon.bgBlack.lightBlue.bold,
-  crayon.bgBlack.lightMagenta.bold,
-];
+const center = () => tui.rectangle.value;
+
+// ---------- shared hud ------------------------------------------------------------
+
+new Text({
+  parent: tui,
+  text: "H A C K E R  B A B Y",
+  theme: { base: crayon.bgBlack.lightMagenta.bold },
+  rectangle: { column: 2, row: 1 },
+  zIndex: 5,
+});
+
+const scoreSignals = {
+  letters: new Signal(state.scores.letters),
+  pictures: new Signal(state.scores.pictures),
+};
+const activeModeName = new Signal("letters");
+
+new Text({
+  parent: tui,
+  text: new Computed(() => {
+    // read every signal unconditionally: Computed only tracks dependencies
+    // it actually touches, and branches would drop the untouched score
+    const letters = scoreSignals.letters.value;
+    const pictures = scoreSignals.pictures.value;
+    const name = activeModeName.value;
+    if (name === "letters") return ` SCORE ${letters} `;
+    if (name === "pictures") return ` SCORE ${pictures} `;
+    return "";
+  }),
+  theme: { base: crayon.bgBlack.lightYellow.bold },
+  rectangle: new Computed(() => ({
+    column: Math.max(2, Math.floor(center().width / 2) - 5),
+    row: 1,
+  })),
+  zIndex: 5,
+});
+
+new Text({
+  parent: tui,
+  text: new Computed(() =>
+    `F1 letters · F2 pictures · F3 mirror   [${activeModeName.value}]  ·  ${state.difficulty}  ·  voice: ${
+      speaker.available ? speaker.engine : "off"
+    }  ·  ctrl+c quits`
+  ),
+  theme: { base: crayon.bgBlack.lightBlack },
+  rectangle: new Computed(() => ({
+    column: 2,
+    row: Math.max(2, center().height - 1),
+  })),
+  zIndex: 5,
+});
+
+// shared message lines (each mode reuses these)
+const wordLine = new Signal("");
+new Text({
+  parent: tui,
+  text: wordLine,
+  theme: { base: crayon.bgBlack.lightYellow.bold },
+  rectangle: new Computed(() => ({
+    column: Math.max(2, Math.floor((center().width - wordLine.value.length) / 2)),
+    row: Math.min(center().height - 3, Math.floor(center().height / 2) + 6),
+  })),
+  zIndex: 5,
+});
+
+const cheerLine = new Signal("");
+new Text({
+  parent: tui,
+  text: cheerLine,
+  theme: { base: crayon.bgBlack.lightGreen.bold },
+  rectangle: new Computed(() => ({
+    column: Math.max(2, Math.floor((center().width - cheerLine.value.length) / 2)),
+    row: Math.max(2, Math.floor(center().height / 2) - 7),
+  })),
+  zIndex: 5,
+});
+
+const warnLine = new Signal("");
+new Text({
+  parent: tui,
+  text: warnLine,
+  theme: { base: crayon.bgBlack.lightRed.bold },
+  rectangle: new Computed(() => ({
+    column: Math.max(2, Math.floor((center().width - warnLine.value.length) / 2)),
+    row: Math.min(center().height - 2, Math.floor(center().height / 2) + 8),
+  })),
+  zIndex: 5,
+});
+
+// ---------- particle pools (shower + confetti, shared by all modes) ----------------
 
 const RAIN_COLORS = [
   crayon.bgBlack.lightRed,
@@ -92,118 +176,6 @@ const RAIN_COLORS = [
 ];
 
 const CONFETTI_CHARS = ["*", "o", "+", ".", "x", "#"];
-
-// ---------- tui setup -----------------------------------------------------------
-
-const tui = new Tui({
-  style: crayon.bgBlack,
-  refreshRate: 1000 / 30,
-});
-handleInput(tui);
-tui.dispatch();
-tui.run();
-
-const center = () => tui.rectangle.value;
-
-// title + hud
-new Text({
-  parent: tui,
-  text: "H A C K E R  B A B Y",
-  theme: { base: crayon.bgBlack.lightMagenta.bold },
-  rectangle: { column: 2, row: 1 },
-  zIndex: 5,
-});
-
-const stars = new Signal(state.stars);
-new Text({
-  parent: tui,
-  text: new Computed(() => ` SCORE ${stars.value} `),
-  theme: { base: crayon.bgBlack.lightYellow.bold },
-  rectangle: new Computed(() => ({
-    column: Math.max(2, Math.floor(center().width / 2) - 5),
-    row: 1,
-  })),
-  zIndex: 5,
-});
-
-new Text({
-  parent: tui,
-  text: new Computed(() =>
-    `mode: ${state.difficulty}  ·  voice: ${speaker.available ? speaker.engine : "off"}  ·  ctrl+c quits`
-  ),
-  theme: { base: crayon.bgBlack.lightBlack },
-  rectangle: new Computed(() => ({
-    column: 2,
-    row: Math.max(2, center().height - 1),
-  })),
-  zIndex: 5,
-});
-
-// prompt + transient message lines
-const wordLine = new Signal("");
-new Text({
-  parent: tui,
-  text: wordLine,
-  theme: { base: crayon.bgBlack.lightYellow.bold },
-  rectangle: new Computed(() => ({
-    column: Math.max(2, Math.floor((center().width - wordLine.value.length) / 2)),
-    row: Math.min(center().height - 3, Math.floor(center().height / 2) + GLYPH_HEIGHT - 1),
-  })),
-  zIndex: 5,
-});
-
-const cheerLine = new Signal("");
-new Text({
-  parent: tui,
-  text: cheerLine,
-  theme: { base: crayon.bgBlack.lightGreen.bold },
-  rectangle: new Computed(() => ({
-    column: Math.max(2, Math.floor((center().width - cheerLine.value.length) / 2)),
-    row: Math.max(2, Math.floor(center().height / 2) - GLYPH_HEIGHT),
-  })),
-  zIndex: 5,
-});
-
-const warnLine = new Signal("");
-new Text({
-  parent: tui,
-  text: warnLine,
-  theme: { base: crayon.bgBlack.lightRed.bold },
-  rectangle: new Computed(() => ({
-    column: Math.max(2, Math.floor((center().width - warnLine.value.length) / 2)),
-    row: Math.min(center().height - 2, Math.floor(center().height / 2) + GLYPH_HEIGHT + 1),
-  })),
-  zIndex: 5,
-});
-
-// ---------- the big letter -------------------------------------------------------
-
-const bob = new Signal(0);
-let letterColorIndex = 0;
-let letterComponents: Text[] = [];
-
-function buildLetter(letter: string) {
-  for (const component of letterComponents) component.destroy();
-  letterComponents = [];
-  const rows = renderGlyph(letter);
-  const color = LETTER_COLORS[letterColorIndex % LETTER_COLORS.length];
-  rows.forEach((rowText, i) => {
-    letterComponents.push(
-      new Text({
-        parent: tui,
-        text: rowText,
-        theme: { base: color },
-        rectangle: new Computed(() => ({
-          column: Math.max(1, Math.floor((center().width - GLYPH_WIDTH) / 2)),
-          row: Math.max(2, Math.floor((center().height - GLYPH_HEIGHT) / 2) + i + bob.value),
-        })),
-        zIndex: 3,
-      }),
-    );
-  });
-}
-
-// ---------- falling key shower + confetti ------------------------------------------
 
 interface Particle {
   alive: boolean;
@@ -231,7 +203,7 @@ function makeParticlePool(size: number, zIndex: number): Particle[] {
   });
 }
 
-const shower = makeParticlePool(48, 2);
+const shower = makeParticlePool(48, 4);
 let showerCursor = 0;
 
 function spawnShowerKey(char: string) {
@@ -246,7 +218,7 @@ function spawnShowerKey(char: string) {
   p.text.value = char;
 }
 
-const confetti = makeParticlePool(64, 4);
+const confetti = makeParticlePool(64, 6);
 
 function burstConfetti() {
   const midCol = center().width / 2;
@@ -281,108 +253,63 @@ function updateParticles(pool: Particle[], dt: number, gravity: number) {
   }
 }
 
-// ---------- game state ------------------------------------------------------------
+// ---------- modes -------------------------------------------------------------------
 
-const sequence = shuffle([...LETTERS]);
-let sequenceIndex = 0;
-let target = sequence[0];
-let currentWord = "";
-let celebrating = false;
-let celebrateUntil = 0;
-let lastPromptAt = 0;
-let lastEncourageAt = 0;
-let wrongSinceHint = 0;
-const pressTimes: number[] = [];
+const ctx: Ctx = {
+  tui,
+  center,
+  speaker,
+  spawnShowerKey,
+  burstConfetti,
+  wordLine,
+  cheerLine,
+  warnLine,
+  state,
+  saveState,
+  scoreSignals,
+};
 
-function promptLetter(newWord = true) {
-  if (newWord || !currentWord) currentWord = randomWordFor(target);
-  wordLine.value = `${target} is for ${currentWord.toUpperCase()}!`;
-  speaker.speak(`${target}! ${target} is for ${currentWord}!`);
-  lastPromptAt = Date.now();
-}
+const modes: Record<string, GameMode> = {
+  letters: createLetterMode(ctx),
+  pictures: createPictureMode(ctx),
+  mirror: createMirrorMode(ctx),
+};
 
-function nextLetter() {
-  sequenceIndex = (sequenceIndex + 1) % sequence.length;
-  if (sequenceIndex === 0) shuffle(sequence);
-  target = sequence[sequenceIndex];
-  letterColorIndex++;
-  celebrating = false;
+let active: GameMode = modes.letters;
+
+function switchMode(name: string) {
+  const next = modes[name];
+  if (!next || next === active) return;
+  active.stop();
+  wordLine.value = "";
   cheerLine.value = "";
   warnLine.value = "";
-  buildLetter(target);
-  promptLetter();
-}
-
-function celebrate() {
-  celebrating = true;
-  celebrateUntil = Date.now() + CELEBRATE_MS;
-  stars.value = ++state.stars;
-  saveState(state);
-  burstConfetti();
-  cheerLine.value = `YAY! ${target} is for ${currentWord.toUpperCase()}! GREAT JOB!`;
-  warnLine.value = "";
-  speaker.speak(`Yay! ${target}! ${target} is for ${currentWord}! Great job!`);
-}
-
-function encourage() {
-  const now = Date.now();
-  if (now - lastEncourageAt < ENCOURAGE_INTERVAL_MS) {
-    warnLine.value = `just press ${target}!`;
-    return;
-  }
-  lastEncourageAt = now;
-  const phrase = ENCOURAGEMENTS[Math.floor(Math.random() * ENCOURAGEMENTS.length)]
-    .replaceAll("{L}", target);
-  warnLine.value = phrase.toUpperCase();
-  speaker.speak(phrase);
-}
-
-function trackMash(): boolean {
-  const now = Date.now();
-  pressTimes.push(now);
-  while (pressTimes.length && now - pressTimes[0] > MASH_WINDOW_MS) pressTimes.shift();
-  return pressTimes.length >= MASH_THRESHOLD;
-}
-
-function handleKey(char: string) {
-  spawnShowerKey(char);
-
-  if (celebrating) return;
-
-  const mashing = trackMash();
-
-  if (mashing && state.difficulty === "hard") {
-    encourage();
-    return;
-  }
-  if (mashing && char !== target) {
-    warnLine.value = "wah wah... one key at a time!";
-    return;
-  }
-
-  if (char === target) {
-    wrongSinceHint = 0;
-    celebrate();
-  } else {
-    wrongSinceHint++;
-    if (wrongSinceHint >= 4 && Date.now() - lastPromptAt > 6000) {
-      wrongSinceHint = 0;
-      promptLetter(true);
-    }
-  }
+  active = next;
+  activeModeName.value = name;
+  active.start();
 }
 
 // ---------- input -------------------------------------------------------------------
 
 tui.on("keyPress", ({ key, ctrl, meta }) => {
   if (ctrl && (key === "q" || key === "c")) {
-    saveState(state);
+    saveState();
     tui.destroy();
     Deno.exit(0);
   }
   if (ctrl || meta) return;
+
+  if (key === "f1") return switchMode("letters");
+  if (key === "f2") return switchMode("pictures");
+  if (key === "f3") return switchMode("mirror");
+
   if (typeof key === "string" && /^[a-z0-9]$/i.test(key)) {
-    handleKey(key.toUpperCase());
+    const char = key.toUpperCase();
+    // keys rain festively over every mode, just like the web app
+    spawnShowerKey(char);
+    active.handleKey(char);
+  } else if (active.name === "mirror" && key === "space") {
+    active.handleKey(" ");
   }
 });
 
@@ -392,28 +319,16 @@ let t = 0;
 setInterval(() => {
   const dt = TICK_MS / 1000;
   t += dt;
-
-  bob.value = Math.round(Math.sin(t * 2.2));
-
   updateParticles(shower, dt, 14);
   updateParticles(confetti, dt, 26);
-
-  if (celebrating && Date.now() >= celebrateUntil) {
-    nextLetter();
-  }
-
-  if (!celebrating && Date.now() - lastPromptAt > IDLE_REPROMPT_MS) {
-    promptLetter(true);
-  }
-
-  // fade the mash warning after a couple of seconds
-  if (warnLine.value && Date.now() - lastEncourageAt > 2500 && !celebrating) {
-    const stale = pressTimes.length === 0 || Date.now() - pressTimes[pressTimes.length - 1] > 2500;
-    if (stale) warnLine.value = "";
-  }
+  active.tick(dt, t);
 }, TICK_MS);
 
 // ---------- go! -----------------------------------------------------------------------
 
-buildLetter(target);
-promptLetter();
+const bootMode = Deno.args.find((a) => a.startsWith("--mode="))?.slice(7) ?? "letters";
+if (modes[bootMode] && bootMode !== "letters") {
+  activeModeName.value = bootMode;
+  active = modes[bootMode];
+}
+active.start();

@@ -1,8 +1,8 @@
 {
   "tasks": {
-    "play": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say --allow-read --allow-write=. main.ts",
-    "play:hard": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say --allow-read --allow-write=. main.ts --hard",
-    "play:quiet": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say --allow-read --allow-write=. main.ts --no-voice"
+    "play": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg --allow-read --allow-write=. main.ts",
+    "play:hard": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg --allow-read --allow-write=. main.ts --hard",
+    "play:quiet": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg --allow-read --allow-write=. main.ts --no-voice"
   },
   "imports": {
     "tui/": "../../deno_tui/",
