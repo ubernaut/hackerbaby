@@ -247,6 +247,20 @@ body {
   animation: mic-pulse 1s ease-in-out infinite;
 }
 
+#mic-status.unavailable {
+  opacity: 0.3;
+  filter: grayscale(1);
+  position: relative;
+}
+
+#mic-status.unavailable::after {
+  content: '🚫';
+  font-size: 1.2rem;
+  position: absolute;
+  right: -0.6em;
+  bottom: -0.2em;
+}
+
 @keyframes mic-pulse {
   0%,
   100% {

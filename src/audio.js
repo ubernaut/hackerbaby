@@ -22,6 +22,16 @@ export function unlockAudio() {
   return ctx;
 }
 
+// Browsers may suspend the context while the tab is hidden; wake it back up
+// as soon as the kiosk is visible or touched again so sounds never go dead.
+function resumeIfSuspended() {
+  if (ctx && ctx.state === 'suspended') ctx.resume();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') resumeIfSuspended();
+});
+window.addEventListener('pointerdown', resumeIfSuspended, true);
+
 function tone({ freq = 440, time = 0, dur = 0.2, type = 'sine', vol = 0.3, dest = master, glideTo = null }) {
   const t0 = ctx.currentTime + time;
   const osc = ctx.createOscillator();

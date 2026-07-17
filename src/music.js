@@ -18,6 +18,8 @@ let playing = null; // null | 'synth' | 'yt'
 let player = null;
 let playerReadyPromise = null;
 let apiPromise = null;
+let ytStateHandler = null;
+let ytWatchdog = null;
 
 export function getPlaylistId() {
   return playlistId;
@@ -92,6 +94,9 @@ function ensurePlayer() {
               clearTimeout(timeout);
               resolve(player);
             },
+            onStateChange: (e) => {
+              ytStateHandler?.(e);
+            },
             onError: () => {
               // per-video errors (deleted/blocked) — the playlist skips onward
             }
@@ -121,6 +126,7 @@ export function startBgMusic() {
       p.loadPlaylist({ list: playlistId, listType: 'playlist' });
       p.setLoop(true);
       p.setShuffle(true);
+      armYtWatchdog();
     })
     .catch((err) => {
       console.warn('YouTube music unavailable, using built-in tunes:', err);
@@ -130,8 +136,34 @@ export function startBgMusic() {
     });
 }
 
+// A playlist that never reaches the PLAYING state (bad ID, empty, every video
+// embed-blocked) would otherwise mean silence — fall back to the synth tunes.
+function armYtWatchdog() {
+  clearTimeout(ytWatchdog);
+  ytStateHandler = (e) => {
+    if (e.data === window.YT?.PlayerState?.PLAYING) {
+      clearTimeout(ytWatchdog);
+      ytWatchdog = null;
+    }
+  };
+  ytWatchdog = setTimeout(() => {
+    ytWatchdog = null;
+    if (playing !== 'yt') return;
+    console.warn('YouTube playlist never started playing; using built-in tunes');
+    try {
+      player?.stopVideo?.();
+    } catch (_) {
+      // player mid-initialization
+    }
+    playing = 'synth';
+    startSynth();
+  }, 12000);
+}
+
 export function stopBgMusic() {
   stopSynth();
+  clearTimeout(ytWatchdog);
+  ytWatchdog = null;
   try {
     player?.pauseVideo?.();
   } catch (_) {

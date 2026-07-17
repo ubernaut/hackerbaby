@@ -59,6 +59,9 @@ const parentPanel = initParentPanel({
   onMusicToggled: (playing) => updateMusicButton(playing)
 });
 
+// keep the letter game quiet while a grown-up is in the settings modals
+letterGame.promptGate = () => !parentPanel.isOpen() && !parentPanel.isGateOpen();
+
 // ---- score badge -------------------------------------------------------------
 const scoreBadge = document.getElementById('score-badge');
 
@@ -137,6 +140,8 @@ function setMode(mode) {
 // pointerdown and swallow the trailing click.
 function bindTap(el, handler) {
   el.addEventListener('pointerdown', (e) => {
+    // primary button/touch only — right/middle click shouldn't trigger
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
     handler();

@@ -1,4 +1,4 @@
-import { BUILTIN_CARDS } from './words.js';
+import { BUILTIN_CARDS, shuffle } from './words.js';
 import { listCustomCards } from './customCards.js';
 import { playSuccess, playChime, playBoing } from './audio.js';
 import { speak, createListener, isSpeechActive, onSpeechActivity } from './speech.js';
@@ -19,6 +19,10 @@ const STAGE_BACKGROUNDS = [
 
 function normalize(text) {
   return ` ${text.toLowerCase().replace(/[^a-z' ]+/g, ' ').replace(/\s+/g, ' ').trim()} `;
+}
+
+function article(word) {
+  return /^[aeiou]/i.test(word) ? 'an' : 'a';
 }
 
 export class PictureGame {
@@ -98,13 +102,13 @@ export class PictureGame {
       for (const c of custom) {
         const url = URL.createObjectURL(c.blob);
         this.objectUrls.push(url);
-        deck.push({ word: c.word, image: url, alt: [] });
+        deck.push({ word: c.word, image: url, alt: c.alt || [] });
       }
     } catch (err) {
       console.warn('custom cards unavailable', err);
     }
 
-    this.deck = deck.sort(() => Math.random() - 0.5);
+    this.deck = shuffle(deck);
     this.deckIndex = 0;
   }
 
@@ -113,8 +117,13 @@ export class PictureGame {
     this.running = true;
     this.paused = false;
     await this.refreshDeck();
+    // the mode may have been switched away while the deck loaded — don't
+    // leave the microphone running under another game
+    if (!this.running) return;
     if (!this.listener.supported) {
       console.warn('SpeechRecognition unavailable; cards will auto-advance.');
+      this.micEl.classList.add('unavailable');
+      this.micEl.title = 'Speech recognition not available — cards advance on the timer';
     }
     this.listener.start();
     this._showCard(this.deck[0]);
@@ -228,7 +237,7 @@ export class PictureGame {
     if (!this.running || this.paused || this.locked) return;
     this.locked = true;
     playChime();
-    speak(`This is a ${this.card.word}. ${this.card.word}!`);
+    speak(`This is ${article(this.card.word)} ${this.card.word}. ${this.card.word}!`);
     this.advanceTimer = setTimeout(() => this._next(), 3200);
   }
 
@@ -239,7 +248,7 @@ export class PictureGame {
       return;
     }
     this.deckIndex = (this.deckIndex + 1) % this.deck.length;
-    if (this.deckIndex === 0) this.deck.sort(() => Math.random() - 0.5);
+    if (this.deckIndex === 0) shuffle(this.deck);
     this._showCard(this.deck[this.deckIndex]);
   }
 }

@@ -16,11 +16,16 @@ function openDb() {
   });
 }
 
-export async function addCustomCard({ word, blob }) {
+export async function addCustomCard({ word, blob, alt = [] }) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).add({ word: word.trim().toLowerCase(), blob, addedAt: Date.now() });
+    tx.objectStore(STORE).add({
+      word: word.trim().toLowerCase(),
+      alt: alt.map((a) => a.trim().toLowerCase()).filter(Boolean),
+      blob,
+      addedAt: Date.now()
+    });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

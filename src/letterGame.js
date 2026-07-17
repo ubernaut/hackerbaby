@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import fontJson from 'three/examples/fonts/helvetiker_bold.typeface.json';
-import { LETTERS, randomWordFor } from './words.js';
+import { LETTERS, randomWordFor, shuffle } from './words.js';
 import { playPop, playSuccess, playSad, playWhoosh, playBoing, playSlideWhistle, playHonk } from './audio.js';
 import { speak } from './speech.js';
 import { getScore, addScore } from './scoreboard.js';
@@ -143,7 +143,7 @@ export class LetterGame {
     this.theme = THEMES[0];
     this._applyTheme(THEMES[Math.floor(Math.random() * THEMES.length)]);
 
-    this.sequence = [...LETTERS].sort(() => Math.random() - 0.5);
+    this.sequence = shuffle([...LETTERS]);
     this.sequenceIndex = 0;
     this.target = this.sequence[0];
 
@@ -191,7 +191,15 @@ export class LetterGame {
 
   _applyTheme(theme) {
     this.theme = theme;
-    this.backgroundTexture = makeBackgroundTexture(theme);
+    // one texture per theme, cached forever — building a fresh CanvasTexture
+    // per letter leaked ~1MB of GPU memory each
+    if (!this.themeTextures) this.themeTextures = new Map();
+    let tex = this.themeTextures.get(theme.name);
+    if (!tex) {
+      tex = makeBackgroundTexture(theme);
+      this.themeTextures.set(theme.name, tex);
+    }
+    this.backgroundTexture = tex;
     if (!this.overlayMode) this.scene.background = this.backgroundTexture;
     this.particles.material.map = this._sprite(theme.sprite);
     this.particles.material.needsUpdate = true;
@@ -645,17 +653,21 @@ export class LetterGame {
   }
 
   _promptLetter({ newWord = true } = {}) {
+    // stay quiet while the grown-ups panel is up (it has its own voice previews)
+    if (this.promptGate && !this.promptGate()) return;
     if (newWord || !this.currentWord) this.currentWord = randomWordFor(this.target);
     speak(`${this.target}! ... ${this.target} is for ${this.currentWord}!`);
     this.lastPromptAt = performance.now();
   }
 
-  nextLetter() {
+  _advanceTarget() {
     this.sequenceIndex = (this.sequenceIndex + 1) % this.sequence.length;
-    if (this.sequenceIndex === 0) {
-      this.sequence.sort(() => Math.random() - 0.5);
-    }
+    if (this.sequenceIndex === 0) shuffle(this.sequence);
     this.target = this.sequence[this.sequenceIndex];
+  }
+
+  nextLetter() {
+    this._advanceTarget();
     this._nextTheme();
     this._showLetter(this.target);
     this._promptLetter();
@@ -669,7 +681,14 @@ export class LetterGame {
     this.burstConfetti();
     const word = this.currentWord;
     speak(`Yay! ${this.target}! ${this.target} is for ${word}! Great job!`, { pitch: 1.4, rate: 0.95 });
-    setTimeout(() => {
+    this.celebrateTimer = setTimeout(() => {
+      this.celebrateTimer = null;
+      if (!this.running) return;
+      if (this.paused) {
+        // finish the celebration once the game resumes
+        this.pendingNextLetter = true;
+        return;
+      }
       playWhoosh();
       this.nextLetter();
     }, 2300);
@@ -706,7 +725,13 @@ export class LetterGame {
   }
 
   handleKey(char) {
-    if (!this.running || this.celebrating || this.paused) return;
+    if (!this.running || this.paused) return;
+    if (this.celebrating) {
+      // no game logic during the celebration, but keep the party going
+      this.spawnKeyLetter(char);
+      playPop();
+      return;
+    }
     const mashing = this._trackMash();
 
     // every press rains down in festive colors
@@ -752,10 +777,33 @@ export class LetterGame {
 
   stop() {
     this.running = false;
+    if (this.celebrateTimer) {
+      clearTimeout(this.celebrateTimer);
+      this.celebrateTimer = null;
+    }
+    this.pendingNextLetter = false;
+    if (this.celebrating) {
+      // finish the interrupted celebration silently: advance the target and
+      // drop the zoomed-out mesh so the next start() opens on a fresh letter
+      this._advanceTarget();
+      if (this.letterMesh) {
+        this.letterGroup.remove(this.letterMesh);
+        this.letterMesh.material.dispose();
+        this.letterMesh = null;
+      }
+      this.celebrating = false;
+    }
   }
 
   setPaused(paused) {
     this.paused = paused;
+    if (!paused && this.pendingNextLetter) {
+      this.pendingNextLetter = false;
+      if (this.running) {
+        playWhoosh();
+        this.nextLetter();
+      }
+    }
   }
 
   _resize() {
@@ -798,8 +846,13 @@ export class LetterGame {
       }
     }
 
-    // gentle re-prompt when he wanders off
-    if (this.running && !this.celebrating && performance.now() - this.lastPromptAt > IDLE_REPROMPT_MS) {
+    // gentle re-prompt when he wanders off (not while the panel is talking)
+    if (
+      this.running &&
+      !this.celebrating &&
+      (!this.promptGate || this.promptGate()) &&
+      performance.now() - this.lastPromptAt > IDLE_REPROMPT_MS
+    ) {
       this._promptLetter({ newWord: true });
     }
 

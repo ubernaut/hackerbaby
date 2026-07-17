@@ -225,7 +225,7 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
       img.onload = () => URL.revokeObjectURL(img.src);
       const span = document.createElement('span');
       span.className = 'word';
-      span.textContent = card.word;
+      span.textContent = card.alt?.length ? `${card.word} (+${card.alt.length})` : card.word;
       const del = document.createElement('button');
       del.textContent = 'Delete';
       del.addEventListener('click', async () => {
@@ -334,14 +334,18 @@ export function initParentPanel({ onCardsChanged, onRepeatPrompt, onMusicToggled
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const word = wordInput.value.trim();
+    // first word is displayed; any comma-separated extras also count as
+    // correct answers ("dada, daddy, papa")
+    const parts = wordInput.value.split(',').map((s) => s.trim()).filter(Boolean);
+    const word = parts[0] || '';
+    const alt = parts.slice(1);
     const blob = capturedBlob || fileInput.files?.[0];
     if (!word) return;
     if (!blob) {
       formStatus.textContent = 'Choose a photo file or take one with the camera.';
       return;
     }
-    await addCustomCard({ word, blob });
+    await addCustomCard({ word, blob, alt });
     form.reset();
     clearCaptured();
     stopCapture();

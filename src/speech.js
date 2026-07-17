@@ -81,8 +81,13 @@ function settleUtterance(utter) {
 }
 
 export function isSpeechActive(graceMs = 1200) {
+  if (window.speechSynthesis?.speaking) {
+    // keep the grace window anchored to when speech ACTUALLY ends, even if
+    // the per-utterance safety timer settled early
+    lastSpeechEndAt = performance.now();
+    return true;
+  }
   if (pendingUtterances.size > 0) return true;
-  if (window.speechSynthesis?.speaking) return true;
   return performance.now() - lastSpeechEndAt < graceMs;
 }
 
@@ -93,7 +98,8 @@ export function speak(text, { rate = 0.85, pitch = 1.25, interrupt = true } = {}
   const utter = new SpeechSynthesisUtterance(text);
   if (voice) utter.voice = voice;
   // per-prompt base rate scaled by the grown-ups speed setting
-  utter.rate = Math.min(2, Math.max(0.1, rate * getSpeechRate()));
+  const finalRate = Math.min(2, Math.max(0.1, rate * getSpeechRate()));
+  utter.rate = finalRate;
   utter.pitch = pitch;
   utter.volume = 1;
 
@@ -102,8 +108,9 @@ export function speak(text, { rate = 0.85, pitch = 1.25, interrupt = true } = {}
   utter.onend = () => settleUtterance(utter);
   utter.onerror = () => settleUtterance(utter);
   // Safety net: in environments where onend never fires (no voices, muted
-  // synth), clear after roughly how long the phrase could take to say.
-  utter._safetyTimer = setTimeout(() => settleUtterance(utter), 1500 + text.length * 90);
+  // synth), clear after roughly how long the phrase could take to say —
+  // scaled by the actual speech rate so slow speech doesn't outlive it.
+  utter._safetyTimer = setTimeout(() => settleUtterance(utter), (1500 + text.length * 90) / finalRate);
 
   synth.speak(utter);
 }
