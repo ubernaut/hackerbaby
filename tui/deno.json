@@ -1,0 +1,11 @@
+{
+  "tasks": {
+    "play": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say --allow-read --allow-write=. main.ts",
+    "play:hard": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say --allow-read --allow-write=. main.ts --hard",
+    "play:quiet": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say --allow-read --allow-write=. main.ts --no-voice"
+  },
+  "imports": {
+    "tui/": "../../deno_tui/",
+    "crayon": "https://deno.land/x/crayon@3.3.3/mod.ts"
+  }
+}

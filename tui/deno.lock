@@ -1,0 +1,84 @@
+{
+  "version": "5",
+  "specifiers": {
+    "jsr:@denosaurs/plug@1.0.6": "1.0.6",
+    "jsr:@sigma/pty-ffi@0.39.1": "0.39.1",
+    "jsr:@std/assert@0.221": "0.221.0",
+    "jsr:@std/assert@^1.0.14": "1.0.19",
+    "jsr:@std/encoding@0.221": "0.221.0",
+    "jsr:@std/fmt@0.221": "0.221.0",
+    "jsr:@std/fs@0.221": "0.221.0",
+    "jsr:@std/path@0.221": "0.221.0",
+    "npm:three@0.183.2": "0.183.2"
+  },
+  "jsr": {
+    "@denosaurs/plug@1.0.6": {
+      "integrity": "6cf5b9daba7799837b9ffbe89f3450510f588fafef8115ddab1ff0be9cb7c1a7",
+      "dependencies": [
+        "jsr:@std/encoding",
+        "jsr:@std/fmt",
+        "jsr:@std/fs",
+        "jsr:@std/path"
+      ]
+    },
+    "@sigma/pty-ffi@0.39.1": {
+      "integrity": "d09faf34076a25ef907d8214c7db3650bf9f0991ecf7851a39384629f1f2758b",
+      "dependencies": [
+        "jsr:@denosaurs/plug",
+        "jsr:@std/assert@^1.0.14"
+      ]
+    },
+    "@std/assert@0.221.0": {
+      "integrity": "a5f1aa6e7909dbea271754fd4ab3f4e687aeff4873b4cef9a320af813adb489a"
+    },
+    "@std/assert@1.0.19": {
+      "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e"
+    },
+    "@std/encoding@0.221.0": {
+      "integrity": "d1dd76ef0dc5d14088411e6dc1dede53bf8308c95d1537df1214c97137208e45"
+    },
+    "@std/fmt@0.221.0": {
+      "integrity": "379fed69bdd9731110f26b9085aeb740606b20428ce6af31ef6bd45ef8efa62a"
+    },
+    "@std/fs@0.221.0": {
+      "integrity": "028044450299de8ed5a716ade4e6d524399f035513b85913794f4e81f07da286",
+      "dependencies": [
+        "jsr:@std/assert@0.221",
+        "jsr:@std/path"
+      ]
+    },
+    "@std/path@0.221.0": {
+      "integrity": "0a36f6b17314ef653a3a1649740cc8db51b25a133ecfe838f20b79a56ebe0095",
+      "dependencies": [
+        "jsr:@std/assert@0.221"
+      ]
+    }
+  },
+  "npm": {
+    "three@0.183.2": {
+      "integrity": "sha512-di3BsL2FEQ1PA7Hcvn4fyJOlxRRgFYBpMTcyOgkwJIaDOdJMebEFPA+t98EvjuljDx4hNulAGwF6KIjtwI5jgQ=="
+    }
+  },
+  "remote": {
+    "https://deno.land/x/crayon@3.3.3/mod.ts": "82ad225583a483c4837577971629cddaa22614093af8353da6426b9366de9780",
+    "https://deno.land/x/crayon@3.3.3/src/conversions.ts": "9bfd3b1fbe412bcba092890ac558b6beaad4c3aa399cd99d45fadb324d28afd6",
+    "https://deno.land/x/crayon@3.3.3/src/crayon.ts": "6b237baa08a31c903436e040afd2228a7fffaa5d11dddc58e3c402f79b3c1d04",
+    "https://deno.land/x/crayon@3.3.3/src/styles.ts": "aa588b57b2c0482dc5c6f53109b4287831a9827c0aeef9a88129beae1172c1ee",
+    "https://deno.land/x/crayon@3.3.3/src/util.ts": "af8884a917488de76ac0c2b92482093ade74514ece77a4c64e5eb5b0f6ed68e6"
+  },
+  "workspace": {
+    "links": {
+      "jsr:@ubernaut/deno-tui@0.1.0": {
+        "dependencies": [
+          "jsr:@std/jsonc@1.0.2",
+          "npm:esbuild@0.24.2",
+          "npm:jpeg-js@0.4.4",
+          "npm:markdown-it@14.3.0",
+          "npm:pngjs@7.0.0",
+          "npm:three@0.183.2",
+          "npm:yoga-layout@3.2.1"
+        ]
+      }
+    }
+  }
+}
