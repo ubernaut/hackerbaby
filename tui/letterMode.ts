@@ -59,8 +59,9 @@ export function createLetterMode(ctx: Ctx): GameMode {
   const material = new MeshPhongMaterial({
     color: new Color("#ffffff"),
     emissive: new Color("#000000"),
-    shininess: 70,
-    specular: new Color("#aaaaff"),
+    // muted highlight so the letter's saturated hue survives the lighting
+    shininess: 24,
+    specular: new Color("#222233"),
   });
   let letterMesh: Mesh | null = null;
   let letterBorn = 0;

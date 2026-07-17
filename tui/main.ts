@@ -106,14 +106,15 @@ if (gpu) {
   scene.background = new Color("#0d0620");
   const camera = new PerspectiveCamera(50, 1, 0.1, 100);
   camera.position.set(0, 0.4, 11);
-  scene.add(new AmbientLight(new Color("#ffffff"), 0.75));
-  const key = new DirectionalLight(new Color("#ffffff"), 2.2);
+  // gentle rig: bright lights clip the letter's saturated colors to white
+  scene.add(new AmbientLight(new Color("#ffffff"), 0.55));
+  const key = new DirectionalLight(new Color("#ffffff"), 0.9);
   key.position.set(4, 6, 8);
   scene.add(key);
-  const glowA = new PointLight(new Color("#ff4fd8"), 30, 40);
+  const glowA = new PointLight(new Color("#ff4fd8"), 10, 40);
   glowA.position.set(-6, 3, 4);
   scene.add(glowA);
-  const glowB = new PointLight(new Color("#40c4ff"), 30, 40);
+  const glowB = new PointLight(new Color("#40c4ff"), 10, 40);
   glowB.position.set(6, -3, 4);
   scene.add(glowB);
 
@@ -123,6 +124,10 @@ if (gpu) {
   new ThreeAscii({
     parent: tui,
     theme: { base: crayon.bgBlack },
+    // full-cell blocks with blendWithBase 1 show the scene's true colors;
+    // the default pale glyph-atlas blend (0.24) washes everything to white
+    terminalGlyphStyle: "blocks",
+    effect: { blendWithBase: 1 },
     scene,
     camera,
     rectangle: new Computed(() => ({
