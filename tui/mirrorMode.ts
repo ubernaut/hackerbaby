@@ -1,18 +1,41 @@
-// Mirror mode in a terminal: a live ASCII webcam. Frames come from ffmpeg
-// (v4l2, grayscale rawvideo over a pipe) and are mapped onto a luminance
-// ramp; any key takes a freeze-frame "photo" with a flash, CHEESE! and a
-// shutter pause, just like the web mirror. Without a camera or ffmpeg it
-// falls back to a big friendly face that reacts to keys instead.
+// Mirror mode: a live webcam feed in the terminal. Camera discovery probes
+// every /dev/video* node with a real capture (see cameras.ts). Frames come
+// from ffmpeg as raw RGBA over a pipe (selfie-flipped, row-order corrected).
+//
+// Presentation, best first:
+//  1. WebGPU: frames stream into a three.js DataTexture on a gently swaying
+//     plane, rendered through the ASCII 3D pipeline (color + depth shading).
+//  2. No GPU: classic luminance-ramp ASCII rows.
+//  3. No camera at all: a big silly face that reacts to keys.
+//
+// Any key takes a photo: white flash, "CHEESE!", frozen frame — web parity.
 
 import { crayon } from "crayon";
 import { Text } from "tui/src/components/text.ts";
 import { Computed, Signal } from "tui/src/signals/mod.ts";
+import {
+  Color,
+  DataTexture,
+  Group,
+  LinearFilter,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  RGBAFormat,
+  SRGBColorSpace,
+  UnsignedByteType,
+} from "three";
+import { findCamera } from "./cameras.ts";
 import type { Ctx, GameMode } from "./context.ts";
 
 const RAMP = " .:-=+*#%@";
 const FLASH_RAMP = "@%#*+=-:. ";
 const SNAP_MS = 2500;
-const FLASH_MS = 350;
+const FLASH_MS = 300;
+
+// camera capture resolution fed into the texture (independent of terminal size)
+const CAM_W = 192;
+const CAM_H = 144;
 
 const FACES = [
   ["   .-----.   ", "  ( o   o )  ", "  (    >  )  ", "   ( `-´ )   ", "    `---´    "],
@@ -22,6 +45,8 @@ const FACES = [
 ];
 
 export function createMirrorMode(ctx: Ctx): GameMode {
+  const use3d = Boolean(ctx.stage);
+
   let running = false;
   let child: Deno.ChildProcess | null = null;
   let reading = false;
@@ -31,6 +56,33 @@ export function createMirrorMode(ctx: Ctx): GameMode {
   let faceIndex = 0;
   let cameraActive = false;
 
+  // ---- 3D presentation: webcam texture on a plane -------------------------
+
+  const group = new Group();
+  const textureData = new Uint8Array(CAM_W * CAM_H * 4);
+  const texture = new DataTexture(textureData, CAM_W, CAM_H, RGBAFormat, UnsignedByteType);
+  texture.colorSpace = SRGBColorSpace;
+  texture.magFilter = LinearFilter;
+  texture.minFilter = LinearFilter;
+  const screenMaterial = new MeshBasicMaterial({ map: texture });
+  const screen = new Mesh(new PlaneGeometry(9.6, 7.2), screenMaterial);
+  group.add(screen);
+  const flashPlane = new Mesh(
+    new PlaneGeometry(11, 8.5),
+    new MeshBasicMaterial({ color: new Color("#ffffff") }),
+  );
+  flashPlane.position.z = 0.5;
+  flashPlane.visible = false;
+  group.add(flashPlane);
+
+  function frame3d(_dt: number, t: number) {
+    screen.rotation.y = Math.sin(t * 0.5) * 0.12;
+    screen.rotation.x = Math.sin(t * 0.35) * 0.05;
+    flashPlane.visible = Date.now() < flashUntil;
+  }
+
+  // ---- 2D fallback presentation: luminance ramp rows ----------------------
+
   let cols = 0;
   let rows = 0;
   let rowSignals: Signal<string>[] = [];
@@ -38,7 +90,7 @@ export function createMirrorMode(ctx: Ctx): GameMode {
   let statusComponent: Text | null = null;
   const statusText = new Signal("");
 
-  function buildSurface() {
+  function buildSurface2d() {
     const { width, height } = ctx.center();
     cols = Math.max(20, Math.min(width - 6, 96));
     rows = Math.max(10, Math.min(height - 8, 40));
@@ -60,41 +112,29 @@ export function createMirrorMode(ctx: Ctx): GameMode {
         }),
       );
     }
+  }
+
+  function buildStatusLine() {
     statusComponent = new Text({
       parent: ctx.tui,
       text: statusText,
       theme: { base: crayon.bgBlack.lightYellow.bold },
       rectangle: new Computed(() => ({
         column: Math.max(2, Math.floor((ctx.center().width - statusText.value.length) / 2)),
-        row: Math.max(1, Math.floor((ctx.center().height - rows) / 2) - 1),
+        row: 2,
       })),
       zIndex: 5,
     });
   }
 
-  function teardownSurface() {
+  function teardown2d() {
     for (const component of rowComponents) component.destroy();
     rowComponents = [];
     rowSignals = [];
-    statusComponent?.destroy();
-    statusComponent = null;
   }
 
-  async function hasCamera(): Promise<boolean> {
-    try {
-      await Deno.stat("/dev/video0");
-    } catch (_) {
-      return false;
-    }
-    try {
-      const which = new Deno.Command("which", { args: ["ffmpeg"], stdout: "null", stderr: "null" });
-      return (await which.output()).success;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function renderFrame(frame: Uint8Array, ramp: string) {
+  function renderRamp(frame: Uint8Array, ramp: string) {
+    // gray frame at cols×rows
     for (let y = 0; y < rows; y++) {
       let line = "";
       for (let x = 0; x < cols; x++) {
@@ -105,22 +145,46 @@ export function createMirrorMode(ctx: Ctx): GameMode {
     }
   }
 
-  async function startCamera() {
-    const frameSize = cols * rows;
+  function drawFace() {
+    const face = FACES[faceIndex % FACES.length];
+    const top = Math.floor((rows - face.length) / 2);
+    for (let y = 0; y < rows; y++) {
+      const faceRow = face[y - top];
+      if (faceRow) {
+        const pad = Math.max(0, Math.floor((cols - faceRow.length) / 2));
+        rowSignals[y].value = " ".repeat(pad) + faceRow;
+      } else {
+        rowSignals[y].value = "";
+      }
+    }
+  }
+
+  // ---- capture ---------------------------------------------------------------
+
+  function ffmpegArgs(device: string, use3dPath: boolean): string[] {
+    const size = use3dPath ? `${CAM_W}:${CAM_H}` : `${cols}:${rows}`;
+    // hflip = selfie mirror; vflip only for the texture path (three.js UVs
+    // sample bottom-up, the 2D path reads rows top-down)
+    const flips = use3dPath ? "hflip,vflip" : "hflip";
+    const input = device === "testsrc"
+      ? ["-f", "lavfi", "-i", "testsrc=size=640x480:rate=15"]
+      : ["-f", "v4l2", "-framerate", "15", "-video_size", "640x480", "-i", device];
+    return [
+      "-hide_banner",
+      "-loglevel", "error",
+      ...input,
+      "-vf", `${flips},scale=${size}`,
+      "-pix_fmt", use3dPath ? "rgba" : "gray",
+      "-f", "rawvideo",
+      "pipe:1",
+    ];
+  }
+
+  async function startCamera(device: string) {
+    const frameSize = use3d ? CAM_W * CAM_H * 4 : cols * rows;
     try {
       const command = new Deno.Command("ffmpeg", {
-        args: [
-          "-hide_banner",
-          "-loglevel", "error",
-          "-f", "v4l2",
-          "-framerate", "15",
-          "-video_size", "320x240",
-          "-i", "/dev/video0",
-          "-vf", `hflip,scale=${cols}:${rows}`,
-          "-pix_fmt", "gray",
-          "-f", "rawvideo",
-          "pipe:1",
-        ],
+        args: ffmpegArgs(device, use3d),
         stdout: "piped",
         stderr: "null",
         stdin: "null",
@@ -128,8 +192,8 @@ export function createMirrorMode(ctx: Ctx): GameMode {
       child = command.spawn();
     } catch (_) {
       cameraActive = false;
-      statusText.value = "mirror: no camera — here's a friend instead!";
-      drawFace();
+      statusText.value = "mirror: camera failed to open — here's a friend instead!";
+      if (!use3d) drawFace();
       return;
     }
 
@@ -151,8 +215,12 @@ export function createMirrorMode(ctx: Ctx): GameMode {
         while (buffer.length >= frameSize) {
           const frame = buffer.slice(0, frameSize);
           buffer = buffer.slice(frameSize);
-          if (!frozen && running) {
-            renderFrame(frame, Date.now() < flashUntil ? FLASH_RAMP : RAMP);
+          if (frozen || !running) continue;
+          if (use3d) {
+            textureData.set(frame);
+            texture.needsUpdate = true;
+          } else {
+            renderRamp(frame, Date.now() < flashUntil ? FLASH_RAMP : RAMP);
           }
         }
       }
@@ -165,28 +233,23 @@ export function createMirrorMode(ctx: Ctx): GameMode {
     }
   }
 
-  function drawFace() {
-    const face = FACES[faceIndex % FACES.length];
-    const top = Math.floor((rows - face.length) / 2);
-    for (let y = 0; y < rows; y++) {
-      const faceRow = face[y - top];
-      if (faceRow) {
-        const pad = Math.max(0, Math.floor((cols - faceRow.length) / 2));
-        rowSignals[y].value = " ".repeat(pad) + faceRow;
-      } else {
-        rowSignals[y].value = "";
-      }
-    }
-  }
-
   function stopCamera() {
     reading = false;
-    try {
-      child?.kill("SIGKILL");
-    } catch (_) {
-      // already gone
-    }
+    // SIGTERM lets ffmpeg close the v4l2 stream cleanly — hard kills can
+    // wedge UVC camera firmware until the device is replugged
+    const current = child;
     child = null;
+    if (!current) return;
+    try {
+      current.kill("SIGTERM");
+    } catch (_) {
+      return; // already gone
+    }
+    setTimeout(() => {
+      try {
+        current.kill("SIGKILL");
+      } catch (_) { /* exited cleanly */ }
+    }, 1500);
   }
 
   return {
@@ -195,15 +258,28 @@ export function createMirrorMode(ctx: Ctx): GameMode {
     start() {
       running = true;
       frozen = false;
-      buildSurface();
-      hasCamera().then((ok) => {
+      buildStatusLine();
+      if (use3d && ctx.stage) {
+        ctx.stage.attach(group);
+        ctx.stage.setFrameHandler(frame3d);
+      } else {
+        buildSurface2d();
+      }
+      statusText.value = "mirror: looking for a camera…";
+      findCamera().then((probe) => {
         if (!running) return;
-        if (ok) {
-          startCamera();
+        if (probe.device) {
+          startCamera(probe.device);
         } else {
           cameraActive = false;
-          statusText.value = "mirror: no camera found — here's a friend instead!";
+          statusText.value = `mirror: ${probe.reason} — here's a friend instead!`;
           ctx.speaker.speak("Hello! Look at this silly face!");
+          if (use3d && ctx.stage) {
+            // no camera: drop to the 2D face even in GPU mode
+            ctx.stage.setFrameHandler(null);
+            ctx.stage.detach(group);
+            buildSurface2d();
+          }
           drawFace();
         }
       });
@@ -212,16 +288,21 @@ export function createMirrorMode(ctx: Ctx): GameMode {
     stop() {
       running = false;
       stopCamera();
-      teardownSurface();
+      teardown2d();
+      statusComponent?.destroy();
+      statusComponent = null;
+      if (use3d && ctx.stage) {
+        ctx.stage.setFrameHandler(null);
+        ctx.stage.detach(group);
+      }
     },
 
     handleKey(_char: string) {
       if (!running) return;
       if (cameraActive) {
         if (frozen) return;
-        // freeze-frame photo with a flash
+        // photo: flash first, then hold the frozen frame
         flashUntil = Date.now() + FLASH_MS;
-        frozen = false; // let the flash frame render first
         setTimeout(() => {
           frozen = true;
           frozenUntil = Date.now() + SNAP_MS;
@@ -230,7 +311,7 @@ export function createMirrorMode(ctx: Ctx): GameMode {
         ctx.speaker.speak("Cheese!");
       } else {
         faceIndex++;
-        drawFace();
+        if (rowSignals.length) drawFace();
         ctx.speaker.speak(["Peekaboo!", "Hello you!", "Boop!", "So silly!"][faceIndex % 4]);
       }
     },

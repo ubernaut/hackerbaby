@@ -16,9 +16,11 @@ import { crayon } from "crayon";
 import { Tui } from "tui/src/tui.ts";
 import { handleInput } from "tui/src/input.ts";
 import { Text } from "tui/src/components/text.ts";
+import { ThreeAscii } from "tui/src/components/three_ascii.ts";
 import { Computed, Signal } from "tui/src/signals/mod.ts";
+import { AmbientLight, Color, DirectionalLight, type Object3D, PerspectiveCamera, PointLight, Scene } from "three";
 import { createSpeaker } from "./speech.ts";
-import type { Ctx, GameMode, SavedState } from "./context.ts";
+import type { Ctx, GameMode, SavedState, Stage3D } from "./context.ts";
 import { createLetterMode } from "./letterMode.ts";
 import { createPictureMode } from "./pictureMode.ts";
 import { createMirrorMode } from "./mirrorMode.ts";
@@ -60,6 +62,28 @@ saveState();
 const voiceEnabled = !Deno.args.includes("--no-voice");
 const speaker = await createSpeaker(voiceEnabled);
 
+// ---------- webgpu 3d stage (shared by letter + mirror modes) -----------------
+// Deno ships a real WebGPU implementation; when an adapter exists, the games
+// render actual three.js scenes through the fork's ASCII renderer.
+
+const wants3d = !Deno.args.includes("--no-3d");
+const gpuAdapter = wants3d ? await navigator.gpu?.requestAdapter?.().catch(() => null) : null;
+const gpu = Boolean(gpuAdapter);
+
+// the same typeface asset the web app uses for its 3D letters
+let fontJson: unknown | null = null;
+if (gpu) {
+  try {
+    fontJson = JSON.parse(
+      await Deno.readTextFile(
+        new URL("../node_modules/three/examples/fonts/helvetiker_bold.typeface.json", import.meta.url),
+      ),
+    );
+  } catch (_) {
+    fontJson = null; // web app deps not installed — block-font fallback
+  }
+}
+
 // ---------- tui setup -----------------------------------------------------------
 
 const TICK_MS = 50;
@@ -73,6 +97,59 @@ tui.dispatch();
 tui.run();
 
 const center = () => tui.rectangle.value;
+
+// ---------- the shared 3D → ASCII stage ---------------------------------------------
+
+let stage: Stage3D | null = null;
+if (gpu) {
+  const scene = new Scene();
+  scene.background = new Color("#0d0620");
+  const camera = new PerspectiveCamera(50, 1, 0.1, 100);
+  camera.position.set(0, 0.4, 11);
+  scene.add(new AmbientLight(new Color("#ffffff"), 0.75));
+  const key = new DirectionalLight(new Color("#ffffff"), 2.2);
+  key.position.set(4, 6, 8);
+  scene.add(key);
+  const glowA = new PointLight(new Color("#ff4fd8"), 30, 40);
+  glowA.position.set(-6, 3, 4);
+  scene.add(glowA);
+  const glowB = new PointLight(new Color("#40c4ff"), 30, 40);
+  glowB.position.set(6, -3, 4);
+  scene.add(glowB);
+
+  let frameHandler: ((dt: number, t: number) => void) | null = null;
+  let stageTime = 0;
+
+  new ThreeAscii({
+    parent: tui,
+    theme: { base: crayon.bgBlack },
+    scene,
+    camera,
+    rectangle: new Computed(() => ({
+      column: 0,
+      row: 0,
+      width: center().width,
+      height: center().height,
+    })),
+    onFrame: (dt) => {
+      stageTime += dt;
+      glowA.position.x = Math.sin(stageTime * 0.7) * 7;
+      glowB.position.x = Math.cos(stageTime * 0.5) * -7;
+      frameHandler?.(dt, stageTime);
+    },
+    zIndex: 1,
+  });
+
+  stage = {
+    scene,
+    camera,
+    attach: (root: Object3D) => scene.add(root),
+    detach: (root: Object3D) => scene.remove(root),
+    setFrameHandler: (handler) => {
+      frameHandler = handler;
+    },
+  };
+}
 
 // ---------- shared hud ------------------------------------------------------------
 
@@ -100,7 +177,8 @@ new Text({
     const name = activeModeName.value;
     if (name === "letters") return ` SCORE ${letters} `;
     if (name === "pictures") return ` SCORE ${pictures} `;
-    return "";
+    // same width as the score text so the old cells actually repaint
+    return " ".repeat(12);
   }),
   theme: { base: crayon.bgBlack.lightYellow.bold },
   rectangle: new Computed(() => ({
@@ -113,9 +191,9 @@ new Text({
 new Text({
   parent: tui,
   text: new Computed(() =>
-    `F1 letters · F2 pictures · F3 mirror   [${activeModeName.value}]  ·  ${state.difficulty}  ·  voice: ${
-      speaker.available ? speaker.engine : "off"
-    }  ·  ctrl+c quits`
+    `F1 letters · F2 pictures · F3 mirror   [${activeModeName.value}]  ·  ${state.difficulty}  ·  3d: ${
+      gpu ? "webgpu" : "off"
+    }  ·  voice: ${speaker.available ? speaker.engine : "off"}  ·  ctrl+c quits`
   ),
   theme: { base: crayon.bgBlack.lightBlack },
   rectangle: new Computed(() => ({
@@ -126,6 +204,7 @@ new Text({
 });
 
 // shared message lines (each mode reuses these)
+// pinned clear of the 3D viewport: cheer up top, word + warning at the bottom
 const wordLine = new Signal("");
 new Text({
   parent: tui,
@@ -133,7 +212,7 @@ new Text({
   theme: { base: crayon.bgBlack.lightYellow.bold },
   rectangle: new Computed(() => ({
     column: Math.max(2, Math.floor((center().width - wordLine.value.length) / 2)),
-    row: Math.min(center().height - 3, Math.floor(center().height / 2) + 6),
+    row: Math.max(4, center().height - 4),
   })),
   zIndex: 5,
 });
@@ -145,7 +224,7 @@ new Text({
   theme: { base: crayon.bgBlack.lightGreen.bold },
   rectangle: new Computed(() => ({
     column: Math.max(2, Math.floor((center().width - cheerLine.value.length) / 2)),
-    row: Math.max(2, Math.floor(center().height / 2) - 7),
+    row: 3,
   })),
   zIndex: 5,
 });
@@ -157,7 +236,7 @@ new Text({
   theme: { base: crayon.bgBlack.lightRed.bold },
   rectangle: new Computed(() => ({
     column: Math.max(2, Math.floor((center().width - warnLine.value.length) / 2)),
-    row: Math.min(center().height - 2, Math.floor(center().height / 2) + 8),
+    row: Math.max(5, center().height - 3),
   })),
   zIndex: 5,
 });
@@ -267,6 +346,8 @@ const ctx: Ctx = {
   state,
   saveState,
   scoreSignals,
+  stage,
+  font: fontJson,
 };
 
 const modes: Record<string, GameMode> = {

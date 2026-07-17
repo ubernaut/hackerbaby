@@ -1,14 +1,14 @@
-// The picture game, console style: an ASCII-art card and the word below it.
-// The terminal has no microphone, so instead of SAYING the word he TYPES it
-// (any of the accepted variants counts, matched from the rolling keystroke
-// buffer). After 30 seconds the card says its own name and moves on —
-// exactly like the web game's timer.
+// The picture game: an ASCII-art card, and now REAL speech recognition —
+// say "dog" into the microphone (Whisper WASM in a worker, see stt.ts) or
+// type the word; both count. After 30 seconds the card announces itself
+// and moves on, exactly like the web game.
 
 import { crayon } from "crayon";
 import { Text } from "tui/src/components/text.ts";
 import { Computed, Signal } from "tui/src/signals/mod.ts";
 import { BUILTIN_CARDS, shuffle } from "../src/words.js";
 import { cardArt } from "./art.ts";
+import { createVoiceInput, type VoiceInput } from "./stt.ts";
 import type { Ctx, GameMode } from "./context.ts";
 
 const CARD_TIMEOUT_MS = 30000;
@@ -33,6 +33,11 @@ function article(word: string): string {
   return /^[aeiou]/i.test(word) ? "an" : "a";
 }
 
+// web-app style transcript matching: normalized, padded, whole-word
+function normalizeSpoken(text: string): string {
+  return ` ${text.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim()} `;
+}
+
 export function createPictureMode(ctx: Ctx): GameMode {
   let running = false;
   let deck: Card[] = [];
@@ -47,8 +52,43 @@ export function createPictureMode(ctx: Ctx): GameMode {
 
   const timerText = new Signal("");
   const typedText = new Signal("");
+  const micText = new Signal("");
   let timerComponent: Text | null = null;
   let typedComponent: Text | null = null;
+  let micComponent: Text | null = null;
+
+  // ---- voice input ---------------------------------------------------------
+
+  let voice: VoiceInput | null = null;
+  let voiceInit: Promise<void> | null = null;
+
+  function ensureVoice() {
+    if (voiceInit) return;
+    voiceInit = createVoiceInput({
+      onStatus: (status) => {
+        micText.value = `[mic] ${status}`;
+      },
+      onTranscript: (text) => {
+        if (!running || locked || !card) return;
+        // never "hear" the app's own voice — same guard as the web app
+        if (ctx.speaker.isSpeechActive(800)) return;
+        const heard = normalizeSpoken(text);
+        const hit = [card.word, ...card.alt].some((candidate) => {
+          const normalized = normalizeSpoken(candidate).trim();
+          return normalized.length > 0 && heard.includes(` ${normalized} `);
+        });
+        micText.value = `[mic] heard: ${text.trim().slice(0, 40)}`;
+        if (hit) success("said");
+      },
+    }).then((created) => {
+      voice = created;
+      if (!created.available) micText.value = `[mic] off — ${created.reason}. type the word!`;
+      else micText.value = `[mic] ${created.reason}`;
+      if (running && created.available) created.start();
+    });
+  }
+
+  // ---- ui ------------------------------------------------------------------
 
   function buildHud() {
     timerComponent = new Text({
@@ -57,7 +97,7 @@ export function createPictureMode(ctx: Ctx): GameMode {
       theme: { base: crayon.bgBlack.cyan },
       rectangle: new Computed(() => ({
         column: Math.max(2, Math.floor((ctx.center().width - TIMER_WIDTH) / 2)),
-        row: Math.min(ctx.center().height - 2, Math.floor(ctx.center().height / 2) + 8),
+        row: Math.max(4, ctx.center().height - 7),
       })),
       zIndex: 5,
     });
@@ -67,7 +107,17 @@ export function createPictureMode(ctx: Ctx): GameMode {
       theme: { base: crayon.bgBlack.lightBlack },
       rectangle: new Computed(() => ({
         column: Math.max(2, Math.floor((ctx.center().width - typedText.value.length) / 2)),
-        row: Math.min(ctx.center().height - 1, Math.floor(ctx.center().height / 2) + 9),
+        row: Math.max(5, ctx.center().height - 6),
+      })),
+      zIndex: 5,
+    });
+    micComponent = new Text({
+      parent: ctx.tui,
+      text: micText,
+      theme: { base: crayon.bgBlack.lightBlack },
+      rectangle: new Computed(() => ({
+        column: Math.max(2, Math.floor((ctx.center().width - micText.value.length) / 2)),
+        row: 2,
       })),
       zIndex: 5,
     });
@@ -110,14 +160,14 @@ export function createPictureMode(ctx: Ctx): GameMode {
           theme: { base: color },
           rectangle: new Computed(() => ({
             column: Math.max(1, Math.floor((ctx.center().width - artWidth) / 2)),
-            row: Math.max(2, Math.floor((ctx.center().height - rows.length) / 2) - 2 + i),
+            row: Math.max(3, Math.floor((ctx.center().height - rows.length) / 2) - 2 + i),
           })),
           zIndex: 3,
         }),
       );
     });
 
-    ctx.speaker.speak(`What is this? Can you say ${next.word}? Type it!`);
+    ctx.speaker.speak(`What is this? Can you say ${next.word}?`);
   }
 
   function nextCard() {
@@ -126,20 +176,19 @@ export function createPictureMode(ctx: Ctx): GameMode {
     showCard(deck[deckIndex]);
   }
 
-  function normalize(text: string): string {
+  function normalizeTyped(text: string): string {
     return text.toUpperCase().replace(/[^A-Z]/g, "");
   }
 
-  function matches(): boolean {
+  function typedMatches(): boolean {
     if (!card) return false;
-    const buffer = typed;
     return [card.word, ...card.alt].some((candidate) => {
-      const normalized = normalize(candidate);
-      return normalized.length > 0 && buffer.endsWith(normalized);
+      const normalized = normalizeTyped(candidate);
+      return normalized.length > 0 && typed.endsWith(normalized);
     });
   }
 
-  function success() {
+  function success(how: "said" | "spelled") {
     if (!card) return;
     locked = true;
     nextAt = Date.now() + NEXT_DELAY_MS;
@@ -147,7 +196,11 @@ export function createPictureMode(ctx: Ctx): GameMode {
     ctx.saveState();
     ctx.burstConfetti();
     ctx.cheerLine.value = `YES! ${card.word.toUpperCase()}! GREAT JOB!`;
-    ctx.speaker.speak(`Yes! ${card.word}! You spelled ${card.word}! Yay!`);
+    ctx.speaker.speak(
+      how === "said"
+        ? `Yes! ${card.word}! You said ${card.word}! Yay!`
+        : `Yes! ${card.word}! You spelled ${card.word}! Yay!`,
+    );
   }
 
   function timeUp() {
@@ -164,6 +217,8 @@ export function createPictureMode(ctx: Ctx): GameMode {
     start() {
       running = true;
       buildHud();
+      ensureVoice();
+      voice?.start();
       if (!deck.length) buildDeck();
       showCard(deck[deckIndex]);
     },
@@ -171,18 +226,21 @@ export function createPictureMode(ctx: Ctx): GameMode {
     stop() {
       running = false;
       card = null;
+      voice?.stop();
       clearArt();
       timerComponent?.destroy();
       typedComponent?.destroy();
+      micComponent?.destroy();
       timerComponent = null;
       typedComponent = null;
+      micComponent = null;
     },
 
     handleKey(char: string) {
       if (!running || locked || !card) return;
       typed = (typed + char).slice(-32);
       typedText.value = `> ${typed.slice(-12)}`;
-      if (matches()) success();
+      if (typedMatches()) success("spelled");
     },
 
     tick(_dt: number, _t: number) {

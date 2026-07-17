@@ -1,11 +1,14 @@
 {
   "tasks": {
-    "play": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg --allow-read --allow-write=. main.ts",
-    "play:hard": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg --allow-read --allow-write=. main.ts --hard",
-    "play:quiet": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg --allow-read --allow-write=. main.ts --no-voice"
+    "play": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg,arecord,pw-record --allow-read --allow-write=. --allow-net --allow-env --allow-ffi --allow-sys main.ts",
+    "play:hard": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg,arecord,pw-record --allow-read --allow-write=. --allow-net --allow-env --allow-ffi --allow-sys main.ts --hard",
+    "play:quiet": "deno run --allow-run=which,espeak-ng,espeak,spd-say,say,ffmpeg,arecord,pw-record --allow-read --allow-write=. --allow-net --allow-env --allow-ffi --allow-sys main.ts --no-voice"
   },
   "imports": {
     "tui/": "../../deno_tui/",
-    "crayon": "https://deno.land/x/crayon@3.3.3/mod.ts"
+    "crayon": "https://deno.land/x/crayon@3.3.3/mod.ts",
+    "three": "npm:three@0.183.2",
+    "three/tsl": "npm:three@0.183.2/tsl",
+    "three/webgpu": "npm:three@0.183.2/webgpu"
   }
 }

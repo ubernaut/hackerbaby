@@ -1,9 +1,14 @@
-// The letter game: a big bobbing block letter, spoken prompts, mash
-// detection with easy/hard difficulty — the console twin of the web game.
+// The letter game: the web app's 3D letter, in a terminal. With WebGPU the
+// target letter is real extruded three.js TextGeometry (same font asset and
+// same animation curves as the web game) rendered to ASCII; without it, a
+// chunky 5×7 block-font fallback. Game rules are identical either way.
 
 import { crayon } from "crayon";
 import { Text } from "tui/src/components/text.ts";
 import { Computed, Signal } from "tui/src/signals/mod.ts";
+import { Color, Group, Mesh, MeshPhongMaterial } from "three";
+import { FontLoader } from "npm:three@0.183.2/examples/jsm/loaders/FontLoader.js";
+import { TextGeometry } from "npm:three@0.183.2/examples/jsm/geometries/TextGeometry.js";
 import { LETTERS, randomWordFor, shuffle } from "../src/words.js";
 import { GLYPH_HEIGHT, GLYPH_WIDTH, renderGlyph } from "./font.ts";
 import type { Ctx, GameMode } from "./context.ts";
@@ -31,10 +36,8 @@ const LETTER_COLORS = [
 ];
 
 export function createLetterMode(ctx: Ctx): GameMode {
-  const bob = new Signal(0);
   let running = false;
   let letterColorIndex = 0;
-  let letterComponents: Text[] = [];
 
   const sequence = shuffle([...LETTERS]);
   let sequenceIndex = 0;
@@ -47,7 +50,83 @@ export function createLetterMode(ctx: Ctx): GameMode {
   let wrongSinceHint = 0;
   const pressTimes: number[] = [];
 
-  function buildLetter(letter: string) {
+  // ---- 3D presentation (WebGPU → ASCII, mirrors the web's letterGame) ----
+
+  const use3d = Boolean(ctx.stage && ctx.font);
+  const font = use3d ? new FontLoader().parse(ctx.font) : null;
+  const group = new Group();
+  const geometryCache = new Map<string, TextGeometry>();
+  const material = new MeshPhongMaterial({
+    color: new Color("#ffffff"),
+    emissive: new Color("#000000"),
+    shininess: 70,
+    specular: new Color("#aaaaff"),
+  });
+  let letterMesh: Mesh | null = null;
+  let letterBorn = 0;
+  let stageTime = 0;
+
+  function charGeometry(char: string): TextGeometry {
+    let geometry = geometryCache.get(char);
+    if (!geometry) {
+      geometry = new TextGeometry(char, {
+        font: font!,
+        size: 3,
+        depth: 1.05,
+        curveSegments: 8,
+        bevelEnabled: true,
+        bevelThickness: 0.12,
+        bevelSize: 0.09,
+        bevelSegments: 2,
+      });
+      geometry.computeBoundingBox();
+      const bb = geometry.boundingBox!;
+      geometry.translate(
+        -(bb.max.x + bb.min.x) / 2,
+        -(bb.max.y + bb.min.y) / 2,
+        -(bb.max.z + bb.min.z) / 2,
+      );
+      geometryCache.set(char, geometry);
+    }
+    return geometry;
+  }
+
+  function present3dLetter(letter: string) {
+    if (letterMesh) group.remove(letterMesh);
+    const hue = Math.random();
+    material.color.setHSL(hue, 0.9, 0.55);
+    material.emissive.setHSL(hue, 0.9, 0.16);
+    letterMesh = new Mesh(charGeometry(letter), material);
+    letterMesh.scale.setScalar(0.01);
+    group.add(letterMesh);
+    letterBorn = stageTime;
+  }
+
+  // same curves as the web game's _tick
+  function frame3d(dt: number, t: number) {
+    stageTime = t;
+    if (!letterMesh) return;
+    const age = t - letterBorn;
+    const spring = Math.min(1, age * 2.2);
+    const overshoot = 1 + Math.sin(Math.min(age * 2.2, 1) * Math.PI) * 0.25;
+    if (celebrating) {
+      letterMesh.rotation.y += dt * 9;
+      letterMesh.scale.multiplyScalar(1 + dt * 1.2);
+    } else {
+      letterMesh.scale.setScalar(spring * overshoot);
+      letterMesh.rotation.y = Math.sin(t * 0.9) * 0.4;
+      letterMesh.rotation.x = Math.sin(t * 0.6) * 0.12;
+      letterMesh.rotation.z = 0;
+      letterMesh.position.y = Math.sin(t * 1.3) * 0.35;
+    }
+  }
+
+  // ---- block-font fallback presentation ----------------------------------
+
+  const bob = new Signal(0);
+  let letterComponents: Text[] = [];
+
+  function presentBlockLetter(letter: string) {
     for (const component of letterComponents) component.destroy();
     letterComponents = [];
     const rows = renderGlyph(letter);
@@ -68,6 +147,13 @@ export function createLetterMode(ctx: Ctx): GameMode {
     });
   }
 
+  function presentLetter(letter: string) {
+    if (use3d) present3dLetter(letter);
+    else presentBlockLetter(letter);
+  }
+
+  // ---- game logic (identical to the web) ----------------------------------
+
   function promptLetter(newWord = true) {
     if (newWord || !currentWord) currentWord = randomWordFor(target);
     ctx.wordLine.value = `${target} is for ${currentWord.toUpperCase()}!`;
@@ -87,7 +173,7 @@ export function createLetterMode(ctx: Ctx): GameMode {
     celebrating = false;
     ctx.cheerLine.value = "";
     ctx.warnLine.value = "";
-    buildLetter(target);
+    presentLetter(target);
     promptLetter();
   }
 
@@ -127,13 +213,21 @@ export function createLetterMode(ctx: Ctx): GameMode {
 
     start() {
       running = true;
-      buildLetter(target);
+      if (use3d && ctx.stage) {
+        ctx.stage.attach(group);
+        ctx.stage.setFrameHandler(frame3d);
+      }
+      presentLetter(target);
       promptLetter();
     },
 
     stop() {
       running = false;
       celebrating = false;
+      if (use3d && ctx.stage) {
+        ctx.stage.setFrameHandler(null);
+        ctx.stage.detach(group);
+      }
       for (const component of letterComponents) component.destroy();
       letterComponents = [];
     },
@@ -167,7 +261,7 @@ export function createLetterMode(ctx: Ctx): GameMode {
 
     tick(_dt: number, t: number) {
       if (!running) return;
-      bob.value = Math.round(Math.sin(t * 2.2));
+      if (!use3d) bob.value = Math.round(Math.sin(t * 2.2));
 
       if (celebrating && Date.now() >= celebrateUntil) {
         nextLetter();
