@@ -11,7 +11,7 @@
 // VERSION is stamped by scripts/stamp-sw.mjs at build time, giving every
 // deploy its own cache; activation purges the previous deploy's cache so
 // storage doesn't grow forever.
-const VERSION = 'ba0f944657';
+const VERSION = '8594ec9cd2';
 const CACHE = 'hackerbaby-' + (VERSION.indexOf('__') === 0 ? 'dev' : VERSION);
 const NAV_TIMEOUT_MS = 3500;
 

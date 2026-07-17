@@ -194,6 +194,22 @@ function goFullscreen() {
   }
 }
 
+// Belt and braces with the manifest's "orientation": "portrait": installed
+// PWAs can carry a stale baked-in manifest for days, so also lock portrait
+// at runtime on touch devices once fullscreen engages (lock requires it).
+async function lockPortraitOnMobile() {
+  if (!window.matchMedia('(pointer: coarse)').matches && !('ontouchstart' in window)) return;
+  try {
+    await screen.orientation?.lock?.('portrait');
+  } catch (_) {
+    // desktop, unsupported, or not fullscreen — nothing to do
+  }
+}
+
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) lockPortraitOnMobile();
+});
+
 bindTap(document.getElementById('fullscreen-toggle'), () => {
   if (document.fullscreenElement) {
     document.exitFullscreen?.().catch(() => {});
@@ -298,6 +314,7 @@ document.getElementById('start-button').addEventListener('click', () => {
   if (getMusicEnabled()) startBgMusic();
   updateMusicButton(isBgMusicPlaying());
   goFullscreen();
+  lockPortraitOnMobile(); // covers installed-PWA launches already in fullscreen
   acquireWakeLock();
   startOverlay.classList.add('hidden');
   document.body.classList.add('playing');
